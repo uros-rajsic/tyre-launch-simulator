@@ -8,3 +8,7 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Local agent/test artifacts
+progress.md
+output/
