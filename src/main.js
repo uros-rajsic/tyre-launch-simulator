@@ -10,6 +10,18 @@ const ladderText = document.getElementById("ladder-text");
 const scoreText = document.getElementById("score-text");
 const startButton = document.getElementById("start-btn");
 const debugStarterValues = document.getElementById("debug-starter-values");
+const touchControls = document.getElementById("touch-controls");
+const touchStatusPhase = document.getElementById("touch-status-phase");
+const touchStatusValue = document.getElementById("touch-status-value");
+const throttleControl = document.getElementById("throttle-control");
+const touchThrottle = document.getElementById("touch-throttle");
+const ladderControl = document.getElementById("ladder-control");
+const touchLadder = document.getElementById("touch-ladder");
+const pitchControl = document.getElementById("pitch-control");
+const touchPitch = document.getElementById("touch-pitch");
+const flightStick = document.getElementById("flight-stick");
+const flightStickKnob = document.getElementById("flight-stick-knob");
+const touchLayoutQuery = window.matchMedia("(max-width: 720px)");
 
 const renderer = new THREE.WebGLRenderer({
   canvas,
@@ -57,6 +69,18 @@ const keys = {
   down: false,
   bankLeft: false,
   bankRight: false,
+};
+
+const touchInput = {
+  throttleActive: false,
+  throttleDragging: false,
+  ladderActive: false,
+  ladderDragging: false,
+  pitchActive: false,
+  pitchDragging: false,
+  joystickPointerId: null,
+  joystickX: 0,
+  joystickY: 0,
 };
 
 const world = {
@@ -1345,6 +1369,7 @@ function updateHud() {
   fpsText.textContent = `FPS ${Math.round(state.perf.fps) || "--"}`;
   fpsText.classList.toggle("hidden", state.mode === "menu");
   setMessage(state.message);
+  updateTouchControls();
 }
 
 function describeTyrePhase() {
@@ -1369,6 +1394,66 @@ function describeTyrePhase() {
       return "Loading next tyre";
     default:
       return "Machine ready";
+  }
+}
+
+function setTouchElementVisible(element, visible) {
+  if (!element) {
+    return;
+  }
+  element.classList.toggle("hidden", !visible);
+}
+
+function updateTouchControls() {
+  if (!touchControls) {
+    return;
+  }
+
+  const touchLayout = touchLayoutQuery.matches;
+  const inGame = state.mode !== "menu";
+  const phase = state.tyre.phase;
+  const throttleActive = inGame && state.engineStarted && phase === "mounted";
+  const ladderActive = inGame && phase === "rolling";
+  const pitchActive = ladderActive;
+  const flightActive = inGame && phase === "flying";
+  const controlsVisible = touchLayout && inGame;
+
+  touchInput.throttleActive = throttleActive;
+  touchInput.ladderActive = ladderActive;
+  touchInput.pitchActive = pitchActive;
+
+  touchControls.classList.toggle("hidden", !controlsVisible);
+  touchControls.setAttribute("aria-hidden", controlsVisible ? "false" : "true");
+  setTouchElementVisible(throttleControl, controlsVisible && throttleActive);
+  setTouchElementVisible(ladderControl, controlsVisible && ladderActive);
+  setTouchElementVisible(pitchControl, controlsVisible && pitchActive);
+  setTouchElementVisible(flightStick, controlsVisible && flightActive);
+
+  if (!flightActive) {
+    releaseFlightStick();
+  }
+
+  if (touchStatusPhase && touchStatusValue) {
+    touchStatusPhase.textContent = describeTyrePhase();
+    if (throttleActive) {
+      touchStatusValue.textContent = `${Math.round(state.throttle * 100)}%`;
+    } else if (ladderActive) {
+      touchStatusValue.textContent = `${state.ladderOffset >= 0 ? "+" : ""}${state.ladderOffset.toFixed(1)}m`;
+    } else if (flightActive) {
+      touchStatusValue.textContent = "Steer";
+    } else {
+      touchStatusValue.textContent = state.engineStarted ? "Running" : "Off";
+    }
+  }
+
+  if (touchThrottle && !touchInput.throttleDragging) {
+    touchThrottle.value = Math.round(state.throttle * 100);
+  }
+  if (touchLadder && !touchInput.ladderDragging) {
+    touchLadder.value = Math.round((state.ladderOffset / LADDER_RANGE) * 100);
+  }
+  if (touchPitch && !touchInput.pitchDragging) {
+    touchPitch.value = Math.round((state.ladderTilt / 0.38) * 100);
   }
 }
 
@@ -3346,7 +3431,153 @@ window.addEventListener("blur", () => {
   keys.down = false;
   keys.bankLeft = false;
   keys.bankRight = false;
+  releaseFlightStick();
 });
+
+function setFlightStickAxes(x, y) {
+  touchInput.joystickX = THREE.MathUtils.clamp(x, -1, 1);
+  touchInput.joystickY = THREE.MathUtils.clamp(y, -1, 1);
+  const threshold = 0.22;
+  keys.left = touchInput.joystickX < -threshold;
+  keys.right = touchInput.joystickX > threshold;
+  keys.up = touchInput.joystickY > threshold;
+  keys.down = touchInput.joystickY < -threshold;
+
+  if (flightStickKnob) {
+    const travel = flightStick ? flightStick.clientWidth * 0.28 : 34;
+    flightStickKnob.style.transform = `translate(calc(-50% + ${touchInput.joystickX * travel}px), calc(-50% + ${-touchInput.joystickY * travel}px))`;
+  }
+}
+
+function releaseFlightStick() {
+  const wasJoystickActive = touchInput.joystickPointerId !== null || Math.abs(touchInput.joystickX) > 0.01 || Math.abs(touchInput.joystickY) > 0.01;
+  touchInput.joystickPointerId = null;
+  if (state.tyre.phase === "flying") {
+    setFlightStickAxes(0, 0);
+  } else {
+    touchInput.joystickX = 0;
+    touchInput.joystickY = 0;
+    if (wasJoystickActive) {
+      keys.left = false;
+      keys.right = false;
+      keys.up = false;
+      keys.down = false;
+    }
+    if (flightStickKnob) {
+      flightStickKnob.style.transform = "translate(-50%, -50%)";
+    }
+  }
+}
+
+function updateFlightStickFromPointer(event) {
+  if (!flightStick) {
+    return;
+  }
+  const rect = flightStick.getBoundingClientRect();
+  const centerX = rect.left + rect.width / 2;
+  const centerY = rect.top + rect.height / 2;
+  const radius = Math.max(1, rect.width * 0.5);
+  const dx = (event.clientX - centerX) / radius;
+  const dy = (event.clientY - centerY) / radius;
+  const length = Math.hypot(dx, dy);
+  const scale = length > 1 ? 1 / length : 1;
+  setFlightStickAxes(dx * scale, -dy * scale);
+}
+
+function installTouchControls() {
+  const releaseSliders = () => {
+    touchInput.throttleDragging = false;
+    touchInput.ladderDragging = false;
+    touchInput.pitchDragging = false;
+  };
+
+  if (touchThrottle) {
+    touchThrottle.addEventListener("pointerdown", (event) => {
+      touchInput.throttleDragging = true;
+      event.stopPropagation();
+    });
+    touchThrottle.addEventListener("input", () => {
+      if (touchInput.throttleActive) {
+        state.throttle = THREE.MathUtils.clamp(Number(touchThrottle.value) / 100, 0, 1);
+        updateHud();
+      }
+    });
+    touchThrottle.addEventListener("pointerup", () => {
+      touchInput.throttleDragging = false;
+    });
+    touchThrottle.addEventListener("pointercancel", () => {
+      touchInput.throttleDragging = false;
+    });
+  }
+
+  if (touchLadder) {
+    touchLadder.addEventListener("pointerdown", (event) => {
+      touchInput.ladderDragging = true;
+      event.stopPropagation();
+    });
+    touchLadder.addEventListener("input", () => {
+      if (touchInput.ladderActive) {
+        state.ladderOffset = THREE.MathUtils.clamp((Number(touchLadder.value) / 100) * LADDER_RANGE, -LADDER_RANGE, LADDER_RANGE);
+        updateHud();
+      }
+    });
+    touchLadder.addEventListener("pointerup", () => {
+      touchInput.ladderDragging = false;
+    });
+    touchLadder.addEventListener("pointercancel", () => {
+      touchInput.ladderDragging = false;
+    });
+  }
+
+  if (touchPitch) {
+    touchPitch.addEventListener("pointerdown", (event) => {
+      touchInput.pitchDragging = true;
+      event.stopPropagation();
+    });
+    touchPitch.addEventListener("input", () => {
+      if (touchInput.pitchActive) {
+        state.ladderTilt = THREE.MathUtils.clamp((Number(touchPitch.value) / 100) * 0.38, -0.38, 0.38);
+        updateHud();
+      }
+    });
+    touchPitch.addEventListener("pointerup", () => {
+      touchInput.pitchDragging = false;
+    });
+    touchPitch.addEventListener("pointercancel", () => {
+      touchInput.pitchDragging = false;
+    });
+  }
+
+  if (flightStick) {
+    flightStick.addEventListener("pointerdown", (event) => {
+      if (state.tyre.phase !== "flying") {
+        return;
+      }
+      touchInput.joystickPointerId = event.pointerId;
+      flightStick.setPointerCapture?.(event.pointerId);
+      updateFlightStickFromPointer(event);
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    flightStick.addEventListener("pointermove", (event) => {
+      if (event.pointerId !== touchInput.joystickPointerId) {
+        return;
+      }
+      updateFlightStickFromPointer(event);
+      event.preventDefault();
+    });
+    const endStick = (event) => {
+      if (event.pointerId === touchInput.joystickPointerId) {
+        releaseFlightStick();
+      }
+    };
+    flightStick.addEventListener("pointerup", endStick);
+    flightStick.addEventListener("pointercancel", endStick);
+  }
+
+  window.addEventListener("pointerup", releaseSliders);
+  window.addEventListener("pointercancel", releaseSliders);
+}
 
 window.addEventListener("resize", onResize);
 canvas.addEventListener("pointermove", handlePointerMove);
@@ -3355,6 +3586,7 @@ window.addEventListener("pointerup", handlePointerUp);
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 document.addEventListener("fullscreenchange", onResize);
 startButton.addEventListener("click", startGame);
+installTouchControls();
 
 function onResize() {
   const width = window.innerWidth;
@@ -3362,6 +3594,7 @@ function onResize() {
   renderer.setSize(width, height);
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
+  updateTouchControls();
 }
 
 function update(dt) {

@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tyre Chimney Simulator</title>
+    <link rel="icon" href="data:," />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -51,6 +52,32 @@
       <div class="hud-row">
         <span>Best streak</span>
         <strong id="score-text">0</strong>
+      </div>
+    </div>
+
+    <div id="touch-controls" class="touch-controls hidden" aria-hidden="true">
+      <div id="touch-status" class="touch-status">
+        <span id="touch-status-phase">Waiting</span>
+        <strong id="touch-status-value">0%</strong>
+      </div>
+
+      <div id="throttle-control" class="touch-control touch-control--throttle hidden">
+        <label for="touch-throttle">REV</label>
+        <input id="touch-throttle" type="range" min="0" max="100" value="0" orient="vertical" aria-label="Engine revs" />
+      </div>
+
+      <div id="ladder-control" class="touch-control touch-control--ladder hidden">
+        <label for="touch-ladder">LADDER</label>
+        <input id="touch-ladder" type="range" min="-100" max="100" value="0" aria-label="Ladder position" />
+      </div>
+
+      <div id="pitch-control" class="touch-control touch-control--pitch hidden">
+        <label for="touch-pitch">PITCH</label>
+        <input id="touch-pitch" type="range" min="-100" max="100" value="0" orient="vertical" aria-label="Ladder pitch" />
+      </div>
+
+      <div id="flight-stick" class="flight-stick hidden" aria-label="Flight steering" role="application">
+        <div id="flight-stick-knob" class="flight-stick__knob"></div>
       </div>
     </div>
 

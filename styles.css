@@ -32,6 +32,7 @@ body {
   display: block;
   width: 100vw;
   height: 100vh;
+  touch-action: none;
 }
 
 .panel {
@@ -162,6 +163,127 @@ button:active {
   pointer-events: none;
 }
 
+.touch-controls {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  touch-action: none;
+}
+
+.touch-status,
+.touch-control,
+.flight-stick {
+  position: absolute;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.touch-status {
+  left: max(12px, env(safe-area-inset-left));
+  top: max(12px, env(safe-area-inset-top));
+  display: none;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 120px);
+  padding: 9px 12px;
+  border-radius: 999px;
+  background: rgba(24, 34, 31, 0.72);
+  color: var(--text);
+  font-size: 0.78rem;
+  backdrop-filter: blur(10px);
+}
+
+.touch-status strong {
+  color: #ffe08f;
+  font-variant-numeric: tabular-nums;
+}
+
+.touch-control {
+  display: grid;
+  gap: 8px;
+  place-items: center;
+  color: rgba(248, 243, 230, 0.92);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.touch-control label {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(24, 34, 31, 0.58);
+  backdrop-filter: blur(8px);
+}
+
+.touch-control input {
+  accent-color: var(--accent);
+}
+
+.touch-control--throttle,
+.touch-control--pitch {
+  right: max(14px, env(safe-area-inset-right));
+  top: 45%;
+  transform: translateY(-50%);
+}
+
+.touch-control--pitch {
+  top: 48%;
+}
+
+.touch-control--throttle input,
+.touch-control--pitch input {
+  -webkit-appearance: slider-vertical;
+  appearance: slider-vertical;
+  width: 42px;
+  height: min(40vh, 260px);
+  writing-mode: vertical-lr;
+  direction: rtl;
+}
+
+.touch-control--ladder {
+  left: max(18px, env(safe-area-inset-left));
+  right: max(92px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  justify-items: stretch;
+}
+
+.touch-control--ladder label {
+  justify-self: start;
+}
+
+.touch-control--ladder input {
+  width: min(52vw, 320px);
+  min-width: 190px;
+}
+
+.flight-stick {
+  left: max(18px, env(safe-area-inset-left));
+  bottom: max(22px, env(safe-area-inset-bottom));
+  width: 124px;
+  height: 124px;
+  border: 2px solid rgba(248, 243, 230, 0.38);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, rgba(248, 243, 230, 0.16) 0 18%, transparent 19%),
+    rgba(24, 34, 31, 0.28);
+  backdrop-filter: blur(8px);
+}
+
+.flight-stick__knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 224, 143, 0.9);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.2);
+}
+
 .debug-panel {
   position: absolute;
   right: 14px;
@@ -220,16 +342,71 @@ button:active {
   }
 
   .panel--hud {
-    top: auto;
-    bottom: 18px;
-    left: 18px;
-    right: 18px;
-    min-width: 0;
+    display: none;
+  }
+
+  .touch-controls:not(.hidden) .touch-status {
+    display: flex;
+  }
+
+  .touch-controls:not(.hidden) .touch-control:not(.hidden),
+  .touch-controls:not(.hidden) .flight-stick:not(.hidden) {
+    display: grid;
+  }
+
+  .touch-controls:not(.hidden) .flight-stick:not(.hidden) {
+    display: block;
+  }
+
+  .fps,
+  .debug-panel {
+    display: none;
   }
 
   .message {
-    top: 94px;
-    width: calc(100vw - 36px);
+    top: max(58px, calc(env(safe-area-inset-top) + 58px));
+    left: 50%;
+    width: min(420px, calc(100vw - 32px));
+    max-width: calc(100vw - 32px);
+    padding: 9px 13px;
+    font-size: 0.84rem;
     text-align: center;
+  }
+}
+
+@media (max-width: 720px) and (orientation: portrait) {
+  .touch-control--throttle,
+  .touch-control--pitch {
+    top: 58%;
+  }
+
+  .touch-control--throttle input,
+  .touch-control--pitch input {
+    height: min(30vh, 210px);
+  }
+
+  .touch-control--ladder {
+    right: max(72px, env(safe-area-inset-right));
+  }
+
+  .touch-control--ladder input {
+    width: min(58vw, 280px);
+    min-width: 170px;
+  }
+
+  .flight-stick {
+    width: 112px;
+    height: 112px;
+  }
+
+  .flight-stick__knob {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (min-width: 721px) {
+  .touch-controls {
+    display: none;
   }
 }
