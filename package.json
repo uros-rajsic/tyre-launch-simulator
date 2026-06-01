@@ -1,0 +1,11 @@
+{
+  "name": "tyre-launch-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A browser-based 3D tyre launch simulator.",
+  "type": "module",
+  "scripts": {
+    "dev": "python -m http.server 4174",
+    "start": "python -m http.server 4174"
+  }
+}

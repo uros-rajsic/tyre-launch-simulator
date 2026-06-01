@@ -1,0 +1,235 @@
+:root {
+  color-scheme: light;
+  --sand-1: #f1dec0;
+  --sand-2: #c8a56f;
+  --dust: rgba(250, 236, 200, 0.78);
+  --panel: rgba(31, 47, 44, 0.83);
+  --panel-soft: rgba(40, 63, 57, 0.68);
+  --text: #f8f3e6;
+  --accent: #f4bb57;
+  --accent-strong: #ff8c3a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  background: radial-gradient(circle at top, #f7e7ca 0%, #d7b37b 48%, #8b623b 100%);
+}
+
+body {
+  position: relative;
+}
+
+#game-canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+}
+
+.panel {
+  position: absolute;
+  color: var(--text);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+}
+
+.panel--menu {
+  top: 50%;
+  left: 50%;
+  width: min(540px, calc(100vw - 32px));
+  padding: 24px 24px 22px;
+  border-radius: 24px;
+  transform: translate(-50%, -50%);
+  background:
+    linear-gradient(155deg, rgba(37, 64, 68, 0.92), rgba(24, 34, 31, 0.92)),
+    radial-gradient(circle at top right, rgba(244, 187, 87, 0.28), transparent 38%);
+}
+
+.panel--hud {
+  top: 18px;
+  left: 18px;
+  min-width: 240px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--panel), var(--panel-soft));
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-size: 0.72rem;
+}
+
+h1 {
+  margin: 0 0 10px;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  line-height: 0.95;
+}
+
+.menu-copy {
+  margin: 0 0 16px;
+  color: rgba(248, 243, 230, 0.86);
+  line-height: 1.45;
+}
+
+.controls-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin-bottom: 18px;
+  font-size: 0.95rem;
+}
+
+.controls-grid span {
+  display: inline-block;
+  min-width: 88px;
+  margin-right: 8px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 14px 20px;
+  font: inherit;
+  font-weight: 700;
+  color: #31220f;
+  background: linear-gradient(135deg, #ffe08f, #ff9a4d);
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+.hud-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.94rem;
+}
+
+.hud-row + .hud-row {
+  margin-top: 10px;
+}
+
+.hud-row span {
+  color: rgba(248, 243, 230, 0.78);
+}
+
+.message {
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  transform: translateX(-50%);
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: rgba(24, 34, 31, 0.82);
+  color: var(--text);
+  font-size: 0.96rem;
+  letter-spacing: 0.02em;
+}
+
+.fps {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  min-width: 74px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(24, 34, 31, 0.72);
+  color: rgba(248, 243, 230, 0.9);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  pointer-events: none;
+}
+
+.debug-panel {
+  position: absolute;
+  right: 14px;
+  top: 58px;
+  width: 250px;
+  padding: 10px 12px 12px;
+  border-radius: 10px;
+  background: rgba(24, 34, 31, 0.82);
+  color: rgba(248, 243, 230, 0.92);
+  font-size: 0.76rem;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(10px);
+}
+
+.debug-title {
+  margin-bottom: 7px;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.debug-panel label {
+  display: grid;
+  grid-template-columns: 86px 1fr;
+  align-items: center;
+  gap: 8px;
+  margin: 5px 0;
+}
+
+.debug-panel input {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.debug-panel pre {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+  color: rgba(248, 243, 230, 0.88);
+  font: 0.72rem/1.35 Consolas, "Courier New", monospace;
+}
+
+.hidden {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .panel--menu {
+    padding: 20px 18px 18px;
+  }
+
+  .controls-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .controls-grid span {
+    min-width: 98px;
+  }
+
+  .panel--hud {
+    top: auto;
+    bottom: 18px;
+    left: 18px;
+    right: 18px;
+    min-width: 0;
+  }
+
+  .message {
+    top: 94px;
+    width: calc(100vw - 36px);
+    text-align: center;
+  }
+}

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tyre Chimney Simulator</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <canvas id="game-canvas" aria-label="Tyre launcher simulator"></canvas>
+
+    <div id="menu" class="panel panel--menu">
+      <p class="eyebrow">Workshop Prototype</p>
+      <h1>Tyre Chimney Simulator</h1>
+      <p class="menu-copy">
+        Yank the starter rope to wake the diesel, drag the tyre against the launch disc,
+        build revs, then shove it off with the wooden stick. Use the ladder to guide the
+        tyre toward the chimney.
+      </p>
+      <div class="controls-grid">
+        <div><span>Pull rope</span> Yank-start diesel</div>
+        <div><span>Drag tyre</span> Press against launch disc</div>
+        <div><span>W / S</span> Rev engine / pitch ladder</div>
+        <div><span>A / D</span> Slide ladder left / right</div>
+        <div><span>Q / E</span> Bank ladder</div>
+        <div><span>Mouse</span> Move the wooden stick</div>
+        <div><span>Space</span> Skip shot</div>
+        <div><span>R</span> Reset round</div>
+        <div><span>F</span> Toggle fullscreen</div>
+      </div>
+      <button id="start-btn" type="button">Start Simulator</button>
+    </div>
+
+    <div id="hud" class="panel panel--hud hidden">
+      <div class="hud-row">
+        <span>Round status</span>
+        <strong id="status-text">Waiting to start</strong>
+      </div>
+      <div class="hud-row">
+        <span>Engine</span>
+        <strong id="engine-text">Off</strong>
+      </div>
+      <div class="hud-row">
+        <span>Throttle</span>
+        <strong id="throttle-text">0%</strong>
+      </div>
+      <div class="hud-row">
+        <span>Ladder</span>
+        <strong id="ladder-text">Centered</strong>
+      </div>
+      <div class="hud-row">
+        <span>Best streak</span>
+        <strong id="score-text">0</strong>
+      </div>
+    </div>
+
+    <div id="message" class="message hidden"></div>
+    <div id="fps" class="fps hidden">FPS --</div>
+    <div id="debug-panel" class="debug-panel hidden">
+      <div class="debug-title">Starter Tune</div>
+      <label>Radius +/- <input id="debug-starter-radius" type="range" min="-0.25" max="0.25" step="0.005" /></label>
+      <label>Inner +/- <input id="debug-starter-inner" type="range" min="-0.25" max="0.25" step="0.005" /></label>
+      <label>X +/- <input id="debug-starter-x" type="range" min="-0.45" max="0.45" step="0.005" /></label>
+      <label>Y +/- <input id="debug-starter-y" type="range" min="-0.45" max="0.45" step="0.005" /></label>
+      <label>Z +/- <input id="debug-starter-z" type="range" min="-0.45" max="0.45" step="0.005" /></label>
+      <label>Span +/- <input id="debug-starter-span" type="range" min="-0.35" max="0.35" step="0.005" /></label>
+      <label>Rope +/- <input id="debug-starter-rope" type="range" min="-0.05" max="0.05" step="0.002" /></label>
+      <pre id="debug-starter-values"></pre>
+    </div>
+
+    <script src="./vendor/three.min.js"></script>
+    <script src="./src/main.js"></script>
+  </body>
+</html>
