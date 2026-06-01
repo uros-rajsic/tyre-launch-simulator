@@ -1412,7 +1412,8 @@ function updateTouchControls() {
   const touchLayout = touchLayoutQuery.matches;
   const inGame = state.mode !== "menu";
   const phase = state.tyre.phase;
-  const throttleActive = inGame && state.engineStarted && phase === "mounted";
+  const ladderOrFlightPhase = phase === "rolling" || phase === "flying" || phase === "scored";
+  const throttleActive = inGame && state.engineStarted && !ladderOrFlightPhase;
   const ladderActive = inGame && phase === "rolling";
   const pitchActive = ladderActive;
   const flightActive = inGame && phase === "flying";
