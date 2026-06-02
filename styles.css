@@ -345,10 +345,6 @@ button:active {
     display: none;
   }
 
-  .touch-controls:not(.hidden) .touch-status {
-    display: flex;
-  }
-
   .touch-controls:not(.hidden) .touch-control:not(.hidden),
   .touch-controls:not(.hidden) .flight-stick:not(.hidden) {
     display: grid;
@@ -359,18 +355,11 @@ button:active {
   }
 
   .fps,
-  .debug-panel {
+  .debug-panel,
+  .message,
+  .touch-status,
+  .touch-control label {
     display: none;
-  }
-
-  .message {
-    top: max(58px, calc(env(safe-area-inset-top) + 58px));
-    left: 50%;
-    width: min(420px, calc(100vw - 32px));
-    max-width: calc(100vw - 32px);
-    padding: 9px 13px;
-    font-size: 0.84rem;
-    text-align: center;
   }
 }
 

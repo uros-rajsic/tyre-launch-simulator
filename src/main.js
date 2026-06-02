@@ -255,6 +255,8 @@ const TYRE_OUTER_RADIUS = state.tyre.radius + TYRE_TUBE_RADIUS;
 const IDLE_TYRE_HALF_THICKNESS = 0.08;
 const IDLE_TYRE_SPAWN_X = MACHINE_X - 7.7;
 const IDLE_TYRE_SPAWN_Z = world.machineZ + 6.9;
+const MOBILE_IDLE_TYRE_SPAWN_X = MACHINE_X - 3.8;
+const MOBILE_IDLE_TYRE_SPAWN_Z = world.machineZ + 2.4;
 const ENGINE_MODEL_SCALE = 5.027;
 const FLYWHEEL_MODEL_SCALE = ENGINE_MODEL_SCALE * 0.7;
 const BOARD_MODEL_SCALE = 10.4;
@@ -1951,9 +1953,21 @@ function getSpindleLocalY() {
 }
 
 function getIdleTyrePosition() {
-  const x = IDLE_TYRE_SPAWN_X;
-  const z = IDLE_TYRE_SPAWN_Z;
+  const { x, z } = getIdleTyreSpawn();
   return new THREE.Vector3(x, getTyreRestY(x, z, 0, -0.07), z);
+}
+
+function getIdleTyreSpawn() {
+  if (touchLayoutQuery.matches) {
+    return {
+      x: MOBILE_IDLE_TYRE_SPAWN_X,
+      z: MOBILE_IDLE_TYRE_SPAWN_Z,
+    };
+  }
+  return {
+    x: IDLE_TYRE_SPAWN_X,
+    z: IDLE_TYRE_SPAWN_Z,
+  };
 }
 
 function getMountedTyrePosition() {
@@ -2092,12 +2106,13 @@ function updateTyreDragFromPointer(event) {
     return false;
   }
   const x = THREE.MathUtils.clamp(hit.x, TYRE_DRAG_MIN_X, TYRE_DRAG_MAX_X);
+  const idleSpawn = getIdleTyreSpawn();
   const progress = THREE.MathUtils.smoothstep(
-    THREE.MathUtils.clamp((x - IDLE_TYRE_SPAWN_X) / (mounted.x - IDLE_TYRE_SPAWN_X), 0, 1),
+    THREE.MathUtils.clamp((x - idleSpawn.x) / (mounted.x - idleSpawn.x), 0, 1),
     0.22,
     0.95
   );
-  const z = THREE.MathUtils.lerp(IDLE_TYRE_SPAWN_Z, mounted.z, progress);
+  const z = THREE.MathUtils.lerp(idleSpawn.z, mounted.z, progress);
   state.tyre.dragDepth = z;
   const minY = getTyreRestY(x, z, state.tyre.poseBlend || 0, 0.08);
   state.tyre.position.set(
