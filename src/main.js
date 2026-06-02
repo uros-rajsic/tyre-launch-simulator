@@ -9,6 +9,11 @@ const throttleText = document.getElementById("throttle-text");
 const ladderText = document.getElementById("ladder-text");
 const scoreText = document.getElementById("score-text");
 const startButton = document.getElementById("start-btn");
+const loadingScreen = document.getElementById("loading-screen");
+const loadingBar = document.getElementById("loading-bar");
+const loadingPercent = document.getElementById("loading-percent");
+const loadingDetail = document.getElementById("loading-detail");
+const loadingTitle = document.getElementById("loading-title");
 const debugStarterValues = document.getElementById("debug-starter-values");
 const touchControls = document.getElementById("touch-controls");
 const touchStatusPhase = document.getElementById("touch-status-phase");
@@ -22,6 +27,7 @@ const touchPitch = document.getElementById("touch-pitch");
 const flightStick = document.getElementById("flight-stick");
 const flightStickKnob = document.getElementById("flight-stick-knob");
 const touchLayoutQuery = window.matchMedia("(max-width: 720px)");
+startButton.disabled = true;
 
 const renderer = new THREE.WebGLRenderer({
   canvas,
@@ -646,13 +652,110 @@ function installLadderModel(mesh, json, sourceName) {
 }
 
 const MODEL_BASE_PATH = "./assets/models";
+const MODEL_FILE_BYTES = {
+  "engine2.glb": 12219780,
+  "wheel.glb": 10452656,
+  "woodBoards.glb": 7265064,
+  "building.glb": 11556952,
+  "well.glb": 6131372,
+  "ladder.glb": 6643464,
+  "stick.glb": 3389336,
+  "tyre.glb": 9258648,
+};
+const modelLoadingState = Object.fromEntries(
+  Object.entries(MODEL_FILE_BYTES).map(([name, total]) => [name, { loaded: 0, total, done: false, failed: false }])
+);
+updateLoadingScreen();
+
+function updateLoadingScreen() {
+  const files = Object.values(modelLoadingState);
+  const loadedBytes = files.reduce((sum, file) => sum + Math.min(file.loaded, file.total || file.loaded), 0);
+  const totalBytes = files.reduce((sum, file) => sum + Math.max(file.total, file.loaded), 0);
+  const completedFiles = files.filter((file) => file.done || file.failed).length;
+  const failedFiles = files.filter((file) => file.failed).length;
+  const percent = totalBytes > 0 ? Math.min(100, Math.round((loadedBytes / totalBytes) * 100)) : 0;
+
+  loadingBar.style.width = `${percent}%`;
+  loadingPercent.textContent = `${percent}%`;
+  loadingDetail.textContent =
+    failedFiles > 0
+      ? `${completedFiles}/${files.length} model files finished, ${failedFiles} failed`
+      : `${completedFiles}/${files.length} model files ready`;
+
+  if (completedFiles === files.length) {
+    loadingTitle.textContent = failedFiles > 0 ? "Some models failed" : "Ready";
+    startButton.disabled = false;
+    window.setTimeout(() => loadingScreen.classList.add("is-complete"), failedFiles > 0 ? 900 : 240);
+  }
+}
+
+function setModelLoadProgress(sourceName, loaded, total = modelLoadingState[sourceName]?.total || 0) {
+  const file = modelLoadingState[sourceName];
+  if (!file) return;
+  file.loaded = loaded;
+  file.total = Math.max(total, loaded, file.total);
+  updateLoadingScreen();
+}
+
+function finishModelLoad(sourceName, failed = false) {
+  const file = modelLoadingState[sourceName];
+  if (!file) return;
+  file.failed = failed;
+  file.done = !failed;
+  file.loaded = file.total || file.loaded;
+  updateLoadingScreen();
+}
+
+function mergeChunks(chunks, byteLength) {
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes.buffer;
+}
+
+async function readResponseArrayBufferWithProgress(response, sourceName) {
+  const headerBytes = Number(response.headers.get("content-length")) || 0;
+  const totalBytes = headerBytes || MODEL_FILE_BYTES[sourceName] || 0;
+  setModelLoadProgress(sourceName, 0, totalBytes);
+
+  if (!response.body?.getReader) {
+    const buffer = await response.arrayBuffer();
+    setModelLoadProgress(sourceName, buffer.byteLength, totalBytes || buffer.byteLength);
+    return buffer;
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let receivedBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    receivedBytes += value.byteLength;
+    setModelLoadProgress(sourceName, receivedBytes, totalBytes || receivedBytes);
+  }
+
+  return mergeChunks(chunks, receivedBytes);
+}
 
 async function loadRequiredGlb(sourceName) {
-  const response = await fetch(`${MODEL_BASE_PATH}/${sourceName}`);
-  if (!response.ok) {
-    throw new Error(`Could not load ${sourceName}: ${response.status} ${response.statusText}`);
+  try {
+    const response = await fetch(`${MODEL_BASE_PATH}/${sourceName}`);
+    if (!response.ok) {
+      throw new Error(`Could not load ${sourceName}: ${response.status} ${response.statusText}`);
+    }
+    const buffer = await readResponseArrayBufferWithProgress(response, sourceName);
+    const asset = createMeshFromGlbBuffer(buffer);
+    finishModelLoad(sourceName);
+    return asset;
+  } catch (error) {
+    finishModelLoad(sourceName, true);
+    throw error;
   }
-  return createMeshFromGlbBuffer(await response.arrayBuffer());
 }
 
 async function installSplitEngineModels() {
@@ -1511,6 +1614,9 @@ function updateTouchControls() {
 }
 
 function startGame() {
+  if (startButton.disabled) {
+    return;
+  }
   ensureAudio();
   menu.classList.add("hidden");
   hud.classList.remove("hidden");

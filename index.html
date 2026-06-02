@@ -17,6 +17,20 @@
   <body>
     <canvas id="game-canvas" aria-label="Tyre launcher simulator"></canvas>
 
+    <div id="loading-screen" class="loading-screen" role="status" aria-live="polite">
+      <div class="loading-panel">
+        <p class="loading-kicker">Workshop Boot</p>
+        <h2 id="loading-title">Loading models</h2>
+        <div class="loading-meter" aria-hidden="true">
+          <div id="loading-bar" class="loading-meter__bar"></div>
+        </div>
+        <div class="loading-readout">
+          <strong id="loading-percent">0%</strong>
+          <span id="loading-detail">Preparing 8 model files</span>
+        </div>
+      </div>
+    </div>
+
     <div id="menu" class="panel panel--menu">
       <p class="eyebrow">Workshop Prototype</p>
       <h1>Tyre Chimney Simulator</h1>
