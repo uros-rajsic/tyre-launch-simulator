@@ -232,7 +232,7 @@ button:active {
 .touch-control--throttle,
 .touch-control--pitch {
   --value: 0;
-  width: 58px;
+  width: 112px;
   height: 340px;
   filter: drop-shadow(0 12px 9px rgba(0, 0, 0, 0.28));
 }
@@ -247,11 +247,12 @@ button:active {
   appearance: slider-vertical;
   position: absolute;
   inset: 0;
-  width: 58px;
+  width: 112px;
   height: 340px;
   writing-mode: vertical-lr;
   direction: rtl;
   opacity: 0;
+  pointer-events: none;
 }
 
 .rev-rod {
@@ -391,13 +392,6 @@ button:active {
 
 .touch-control--throttle.is-running .rev-rod__thumb {
   animation: rev-buzz 55ms infinite alternate;
-}
-
-.touch-control--pitch .rev-rod__thumb {
-  background:
-    linear-gradient(100deg, transparent 0 44%, rgba(255, 255, 255, 0.04) 45%, transparent 55%),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.34), rgba(255, 255, 255, 0.035) 25%, rgba(0, 0, 0, 0.28)),
-    linear-gradient(#d8b34e, #a57518 64%, #49300a);
 }
 
 @keyframes rev-buzz {

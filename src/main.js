@@ -1406,6 +1406,14 @@ function setTouchElementVisible(element, visible) {
   element.classList.toggle("hidden", !visible);
 }
 
+function setTouchInputEnabled(input, enabled) {
+  if (!input) {
+    return;
+  }
+  input.disabled = !enabled;
+  input.setAttribute("aria-hidden", enabled ? "false" : "true");
+}
+
 function updateTouchThrottleVisual() {
   if (!throttleControl) {
     return;
@@ -1440,10 +1448,10 @@ function updateTouchControls() {
   const touchLayout = touchLayoutQuery.matches;
   const inGame = state.mode !== "menu";
   const phase = state.tyre.phase;
-  const ladderOrFlightPhase = phase === "rolling" || phase === "flying" || phase === "scored";
-  const throttleActive = inGame && state.engineStarted && !ladderOrFlightPhase;
-  const ladderActive = inGame && phase === "rolling";
-  const pitchActive = ladderActive;
+  const releasedPhase = phase === "rolling" || phase === "doorApproach" || phase === "flying" || phase === "scored" || phase === "missed" || phase === "reloading";
+  const ladderActive = inGame && (phase === "rolling" || phase === "doorApproach");
+  const pitchActive = inGame && phase === "rolling";
+  const throttleActive = inGame && state.engineStarted && !releasedPhase && !pitchActive;
   const flightActive = inGame && phase === "flying";
   const controlsVisible = touchLayout && inGame;
 
@@ -1457,6 +1465,19 @@ function updateTouchControls() {
   setTouchElementVisible(ladderControl, controlsVisible && ladderActive);
   setTouchElementVisible(pitchControl, controlsVisible && pitchActive);
   setTouchElementVisible(flightStick, controlsVisible && flightActive);
+  setTouchInputEnabled(touchThrottle, controlsVisible && throttleActive);
+  setTouchInputEnabled(touchLadder, controlsVisible && ladderActive);
+  setTouchInputEnabled(touchPitch, controlsVisible && pitchActive);
+
+  if (!throttleActive) {
+    touchInput.throttleDragging = false;
+  }
+  if (!ladderActive) {
+    touchInput.ladderDragging = false;
+  }
+  if (!pitchActive) {
+    touchInput.pitchDragging = false;
+  }
 
   if (!flightActive) {
     releaseFlightStick();
@@ -3514,6 +3535,40 @@ function releaseFlightStick() {
   }
 }
 
+function verticalControlValueFromPointer(control, event) {
+  const rect = control.getBoundingClientRect();
+  const top = rect.top + 24;
+  const bottom = rect.bottom - 24;
+  const span = Math.max(1, bottom - top);
+  return THREE.MathUtils.clamp(1 - (event.clientY - top) / span, 0, 1);
+}
+
+function setTouchThrottleFromPointer(event) {
+  if (!touchInput.throttleActive || !throttleControl) {
+    return;
+  }
+  const value = verticalControlValueFromPointer(throttleControl, event);
+  state.throttle = value;
+  if (touchThrottle) {
+    touchThrottle.value = Math.round(value * 100);
+  }
+  updateTouchThrottleVisual();
+  updateHud();
+}
+
+function setTouchPitchFromPointer(event) {
+  if (!touchInput.pitchActive || !pitchControl) {
+    return;
+  }
+  const value = verticalControlValueFromPointer(pitchControl, event);
+  state.ladderTilt = THREE.MathUtils.clamp((value * 2 - 1) * 0.38, -0.38, 0.38);
+  if (touchPitch) {
+    touchPitch.value = Math.round((state.ladderTilt / 0.38) * 100);
+  }
+  updateTouchPitchVisual();
+  updateHud();
+}
+
 function updateFlightStickFromPointer(event) {
   if (!flightStick) {
     return;
@@ -3557,6 +3612,31 @@ function installTouchControls() {
     });
   }
 
+  if (throttleControl) {
+    throttleControl.addEventListener("pointerdown", (event) => {
+      if (!touchInput.throttleActive) {
+        return;
+      }
+      touchInput.throttleDragging = true;
+      throttleControl.setPointerCapture?.(event.pointerId);
+      setTouchThrottleFromPointer(event);
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    throttleControl.addEventListener("pointermove", (event) => {
+      if (!touchInput.throttleDragging) {
+        return;
+      }
+      setTouchThrottleFromPointer(event);
+      event.preventDefault();
+    });
+    const endThrottleDrag = () => {
+      touchInput.throttleDragging = false;
+    };
+    throttleControl.addEventListener("pointerup", endThrottleDrag);
+    throttleControl.addEventListener("pointercancel", endThrottleDrag);
+  }
+
   if (touchLadder) {
     touchLadder.addEventListener("pointerdown", (event) => {
       touchInput.ladderDragging = true;
@@ -3598,6 +3678,31 @@ function installTouchControls() {
     touchPitch.addEventListener("pointercancel", () => {
       touchInput.pitchDragging = false;
     });
+  }
+
+  if (pitchControl) {
+    pitchControl.addEventListener("pointerdown", (event) => {
+      if (!touchInput.pitchActive) {
+        return;
+      }
+      touchInput.pitchDragging = true;
+      pitchControl.setPointerCapture?.(event.pointerId);
+      setTouchPitchFromPointer(event);
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    pitchControl.addEventListener("pointermove", (event) => {
+      if (!touchInput.pitchDragging) {
+        return;
+      }
+      setTouchPitchFromPointer(event);
+      event.preventDefault();
+    });
+    const endPitchDrag = () => {
+      touchInput.pitchDragging = false;
+    };
+    pitchControl.addEventListener("pointerup", endPitchDrag);
+    pitchControl.addEventListener("pointercancel", endPitchDrag);
   }
 
   if (flightStick) {
