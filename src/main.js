@@ -1,4 +1,4 @@
-﻿const canvas = document.getElementById("game-canvas");
+const canvas = document.getElementById("game-canvas");
 const menu = document.getElementById("menu");
 const hud = document.getElementById("hud");
 const message = document.getElementById("message");
@@ -1406,6 +1406,32 @@ function setTouchElementVisible(element, visible) {
   element.classList.toggle("hidden", !visible);
 }
 
+function updateTouchThrottleVisual() {
+  if (!throttleControl) {
+    return;
+  }
+  const value = THREE.MathUtils.clamp(state.throttle, 0, 1);
+  throttleControl.style.setProperty("--value", value.toFixed(3));
+  throttleControl.classList.toggle("is-running", state.engineStarted && value > 0.45);
+}
+
+function updateTouchPitchVisual() {
+  if (!pitchControl) {
+    return;
+  }
+  const value = THREE.MathUtils.clamp((state.ladderTilt / 0.38 + 1) / 2, 0, 1);
+  pitchControl.style.setProperty("--value", value.toFixed(3));
+}
+
+function updateTouchLadderVisual() {
+  if (!ladderControl) {
+    return;
+  }
+  const value = THREE.MathUtils.clamp((state.ladderOffset / LADDER_RANGE + 1) / 2, 0, 1);
+  ladderControl.style.setProperty("--value", value.toFixed(3));
+  ladderControl.classList.toggle("is-moving", touchInput.ladderDragging);
+}
+
 function updateTouchControls() {
   if (!touchControls) {
     return;
@@ -1452,12 +1478,15 @@ function updateTouchControls() {
   if (touchThrottle && !touchInput.throttleDragging) {
     touchThrottle.value = Math.round(state.throttle * 100);
   }
+  updateTouchThrottleVisual();
   if (touchLadder && !touchInput.ladderDragging) {
     touchLadder.value = Math.round((state.ladderOffset / LADDER_RANGE) * 100);
   }
+  updateTouchLadderVisual();
   if (touchPitch && !touchInput.pitchDragging) {
     touchPitch.value = Math.round((state.ladderTilt / 0.38) * 100);
   }
+  updateTouchPitchVisual();
 }
 
 function startGame() {
@@ -3505,6 +3534,7 @@ function installTouchControls() {
     touchInput.throttleDragging = false;
     touchInput.ladderDragging = false;
     touchInput.pitchDragging = false;
+    updateTouchLadderVisual();
   };
 
   if (touchThrottle) {
@@ -3515,6 +3545,7 @@ function installTouchControls() {
     touchThrottle.addEventListener("input", () => {
       if (touchInput.throttleActive) {
         state.throttle = THREE.MathUtils.clamp(Number(touchThrottle.value) / 100, 0, 1);
+        updateTouchThrottleVisual();
         updateHud();
       }
     });
@@ -3529,19 +3560,23 @@ function installTouchControls() {
   if (touchLadder) {
     touchLadder.addEventListener("pointerdown", (event) => {
       touchInput.ladderDragging = true;
+      updateTouchLadderVisual();
       event.stopPropagation();
     });
     touchLadder.addEventListener("input", () => {
       if (touchInput.ladderActive) {
         state.ladderOffset = THREE.MathUtils.clamp((Number(touchLadder.value) / 100) * LADDER_RANGE, -LADDER_RANGE, LADDER_RANGE);
+        updateTouchLadderVisual();
         updateHud();
       }
     });
     touchLadder.addEventListener("pointerup", () => {
       touchInput.ladderDragging = false;
+      updateTouchLadderVisual();
     });
     touchLadder.addEventListener("pointercancel", () => {
       touchInput.ladderDragging = false;
+      updateTouchLadderVisual();
     });
   }
 
@@ -3553,6 +3588,7 @@ function installTouchControls() {
     touchPitch.addEventListener("input", () => {
       if (touchInput.pitchActive) {
         state.ladderTilt = THREE.MathUtils.clamp((Number(touchPitch.value) / 100) * 0.38, -0.38, 0.38);
+        updateTouchPitchVisual();
         updateHud();
       }
     });

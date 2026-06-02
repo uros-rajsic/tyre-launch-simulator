@@ -229,6 +229,14 @@ button:active {
   transform: translateY(-50%);
 }
 
+.touch-control--throttle,
+.touch-control--pitch {
+  --value: 0;
+  width: 58px;
+  height: 340px;
+  filter: drop-shadow(0 12px 9px rgba(0, 0, 0, 0.28));
+}
+
 .touch-control--pitch {
   top: 48%;
 }
@@ -237,16 +245,178 @@ button:active {
 .touch-control--pitch input {
   -webkit-appearance: slider-vertical;
   appearance: slider-vertical;
-  width: 42px;
-  height: min(40vh, 260px);
+  position: absolute;
+  inset: 0;
+  width: 58px;
+  height: 340px;
   writing-mode: vertical-lr;
   direction: rtl;
+  opacity: 0;
+}
+
+.rev-rod {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.rev-rod__rail {
+  position: absolute;
+  left: 50%;
+  top: 24px;
+  bottom: 24px;
+  width: 9px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, #020201, #151209 35%, #7b673c 50%, #070604 66%, #010101);
+  box-shadow:
+    inset 0 0 8px rgba(0, 0, 0, 0.95),
+    0 0 0 2px rgba(6, 14, 10, 0.95),
+    0 0 0 4px rgba(22, 79, 59, 0.75),
+    0 5px 8px rgba(0, 0, 0, 0.25);
+}
+
+.rev-rod__rail::before,
+.rev-rod__rail::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 30px;
+  height: 12px;
+  transform: translateX(-50%);
+  border-radius: 3px;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.38), rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.32)),
+    linear-gradient(#185f48, #0b2b21);
+  border: 2px solid #050e0a;
+  box-shadow: inset 0 -4px 5px rgba(0, 0, 0, 0.35);
+}
+
+.rev-rod__rail::before {
+  top: -8px;
+}
+
+.rev-rod__rail::after {
+  bottom: -8px;
+}
+
+.rev-rod__ticks {
+  display: none;
+}
+
+.rev-rod__oil-track {
+  position: absolute;
+  left: 50%;
+  top: 28px;
+  bottom: 28px;
+  width: 31px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background:
+    radial-gradient(ellipse at 19px 58px, rgba(0, 0, 0, 0.24) 0 4px, transparent 10px),
+    radial-gradient(ellipse at 10px 168px, rgba(0, 0, 0, 0.18) 0 4px, transparent 10px),
+    radial-gradient(ellipse at 22px 250px, rgba(98, 49, 19, 0.2) 0 4px, transparent 10px);
+  mix-blend-mode: multiply;
+  opacity: 0.9;
+}
+
+.rev-rod__thumb {
+  position: absolute;
+  left: 50%;
+  top: calc(278px - (254px * var(--value)));
+  width: 46px;
+  height: 34px;
+  transform: translateX(-50%);
+  border-radius: 5px;
+  background:
+    linear-gradient(100deg, transparent 0 44%, rgba(255, 255, 255, 0.04) 45%, transparent 55%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.34), rgba(255, 255, 255, 0.035) 25%, rgba(0, 0, 0, 0.28)),
+    linear-gradient(#c83c2f, #8e1914 64%, #47100d);
+  border: 3px solid rgba(0, 0, 0, 0.72);
+  box-shadow:
+    inset 0 -10px 9px rgba(0, 0, 0, 0.34),
+    inset 0 1px 1px rgba(255, 255, 255, 0.04),
+    0 7px 9px rgba(0, 0, 0, 0.35);
+  z-index: 5;
+}
+
+.rev-rod__thumb::before,
+.rev-rod__thumb::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.12), transparent 20%),
+    linear-gradient(#5c1a15, #190505);
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.42);
+}
+
+.rev-rod__thumb::before {
+  left: 8px;
+}
+
+.rev-rod__thumb::after {
+  right: 8px;
+}
+
+.rev-rod__thumb-grip {
+  position: absolute;
+  left: 50%;
+  top: calc(278px - (254px * var(--value)) + 15px);
+  width: 22px;
+  height: 6px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: rgba(45, 10, 8, 0.55);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+  z-index: 6;
+}
+
+.rev-rod__metal-flakes {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 34px 38px, rgba(255, 255, 255, 0.08) 0 1px, transparent 2px),
+    radial-gradient(circle at 44px 112px, rgba(0, 0, 0, 0.18) 0 2px, transparent 5px),
+    radial-gradient(circle at 29px 210px, rgba(0, 0, 0, 0.16) 0 2px, transparent 5px),
+    radial-gradient(circle at 49px 292px, rgba(128, 60, 25, 0.18) 0 2px, transparent 5px);
+  opacity: 0.9;
+  z-index: 7;
+}
+
+.touch-control--throttle.is-running .rev-rod__thumb {
+  animation: rev-buzz 55ms infinite alternate;
+}
+
+.touch-control--pitch .rev-rod__thumb {
+  background:
+    linear-gradient(100deg, transparent 0 44%, rgba(255, 255, 255, 0.04) 45%, transparent 55%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.34), rgba(255, 255, 255, 0.035) 25%, rgba(0, 0, 0, 0.28)),
+    linear-gradient(#d8b34e, #a57518 64%, #49300a);
+}
+
+@keyframes rev-buzz {
+  from {
+    margin-left: -0.45px;
+  }
+  to {
+    margin-left: 0.45px;
+  }
 }
 
 .touch-control--ladder {
+  --value: 0.5;
   left: max(18px, env(safe-area-inset-left));
   right: max(92px, env(safe-area-inset-right));
-  bottom: max(18px, env(safe-area-inset-bottom));
+  bottom: max(96px, calc(env(safe-area-inset-bottom) + 74px));
+  width: min(390px, calc(100vw - 36px));
+  height: 86px;
+  filter: drop-shadow(0 10px 8px rgba(0, 0, 0, 0.22));
   justify-items: stretch;
 }
 
@@ -255,8 +425,185 @@ button:active {
 }
 
 .touch-control--ladder input {
-  width: min(52vw, 320px);
-  min-width: 190px;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 86px;
+  opacity: 0;
+}
+
+.ladder-slider {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ladder-slider__track {
+  position: absolute;
+  left: 22px;
+  right: 22px;
+  top: 50%;
+  height: 42px;
+  transform: translateY(-50%);
+}
+
+.ladder-slider__rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 10px;
+  border-radius: 5px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 28%),
+    linear-gradient(90deg, #4b2f18, #8a5b2f 20%, #9b6a3b 50%, #724622 78%, #412713);
+  border: 2px solid rgba(48, 28, 13, 0.72);
+  box-shadow:
+    inset 0 -3px 4px rgba(0, 0, 0, 0.22),
+    inset 0 1px 1px rgba(255, 255, 255, 0.08);
+}
+
+.ladder-slider__rail--top {
+  top: 0;
+}
+
+.ladder-slider__rail--bottom {
+  bottom: 0;
+}
+
+.ladder-slider__rail::before,
+.ladder-slider__rail::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.12), transparent 20%),
+    linear-gradient(#2f2a23, #0f0d0a);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
+  opacity: 0.9;
+}
+
+.ladder-slider__rail::before {
+  left: 8px;
+}
+
+.ladder-slider__rail::after {
+  right: 8px;
+}
+
+.ladder-slider__rungs {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 9px;
+  bottom: 9px;
+  border-radius: 8px;
+  background:
+    repeating-linear-gradient(
+      to right,
+      transparent 0 24px,
+      #7f542d 24px 31px,
+      #b07a46 31px 33px,
+      #724720 33px 40px,
+      transparent 40px 48px
+    );
+  opacity: 0.95;
+}
+
+.ladder-slider__rungs::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.08), transparent 30%, transparent 70%, rgba(0, 0, 0, 0.1));
+  mix-blend-mode: multiply;
+}
+
+.ladder-slider__thumb {
+  position: absolute;
+  left: calc(22px + ((100% - 44px) * var(--value)) - 28px);
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  transform: translateY(-50%);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 24%),
+    linear-gradient(90deg, #4b2d17, #88572d 22%, #9f6b3b 50%, #724520 78%, #442814);
+  border: 3px solid rgba(45, 27, 13, 0.82);
+  box-shadow:
+    inset 0 -9px 10px rgba(0, 0, 0, 0.24),
+    inset 0 1px 1px rgba(255, 255, 255, 0.08),
+    0 7px 9px rgba(0, 0, 0, 0.28);
+  z-index: 5;
+}
+
+.ladder-slider__thumb::before,
+.ladder-slider__thumb::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 40px;
+  height: 6px;
+  transform: translateX(-50%);
+  border-radius: 4px;
+  background:
+    linear-gradient(90deg, #684120, #b47e4b 50%, #633d1d);
+  border: 1px solid rgba(64, 35, 15, 0.6);
+  box-shadow: inset 0 -1px 2px rgba(0, 0, 0, 0.18);
+}
+
+.ladder-slider__thumb::before {
+  top: 13px;
+}
+
+.ladder-slider__thumb::after {
+  bottom: 13px;
+}
+
+.ladder-slider__thumb-grip {
+  position: absolute;
+  left: calc(22px + ((100% - 44px) * var(--value)) - 16px);
+  top: 50%;
+  width: 32px;
+  height: 8px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: rgba(55, 33, 17, 0.45);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.08),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.22);
+  z-index: 6;
+}
+
+.ladder-slider__wood-wear {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  background:
+    radial-gradient(circle at 54px 40px, rgba(255, 255, 255, 0.1) 0 1px, transparent 3px),
+    radial-gradient(circle at 180px 28px, rgba(0, 0, 0, 0.14) 0 2px, transparent 5px),
+    radial-gradient(circle at 292px 52px, rgba(0, 0, 0, 0.14) 0 2px, transparent 5px),
+    radial-gradient(circle at 350px 36px, rgba(90, 52, 22, 0.18) 0 2px, transparent 5px),
+    linear-gradient(110deg, transparent 0 55%, rgba(0, 0, 0, 0.06) 56% 58%, transparent 59%);
+  opacity: 0.85;
+}
+
+.touch-control--ladder.is-moving .ladder-slider__thumb {
+  animation: ladder-creak 60ms infinite alternate;
+}
+
+@keyframes ladder-creak {
+  from {
+    margin-top: -0.35px;
+  }
+  to {
+    margin-top: 0.35px;
+  }
 }
 
 .flight-stick {
@@ -364,23 +711,17 @@ button:active {
 }
 
 @media (max-width: 720px) and (orientation: portrait) {
-  .touch-control--throttle,
+  .touch-control--throttle {
+    top: 33%;
+  }
+
   .touch-control--pitch {
     top: 58%;
   }
 
-  .touch-control--throttle input,
-  .touch-control--pitch input {
-    height: min(30vh, 210px);
-  }
-
   .touch-control--ladder {
     right: max(72px, env(safe-area-inset-right));
-  }
-
-  .touch-control--ladder input {
-    width: min(58vw, 280px);
-    min-width: 170px;
+    bottom: max(108px, calc(env(safe-area-inset-bottom) + 86px));
   }
 
   .flight-stick {

@@ -70,16 +70,42 @@
 
       <div id="throttle-control" class="touch-control touch-control--throttle hidden">
         <label for="touch-throttle">REV</label>
+        <div class="rev-rod" aria-hidden="true">
+          <div class="rev-rod__ticks"></div>
+          <div class="rev-rod__rail"></div>
+          <div class="rev-rod__oil-track"></div>
+          <div class="rev-rod__thumb"></div>
+          <div class="rev-rod__thumb-grip"></div>
+          <div class="rev-rod__metal-flakes"></div>
+        </div>
         <input id="touch-throttle" type="range" min="0" max="100" value="0" orient="vertical" aria-label="Engine revs" />
       </div>
 
       <div id="ladder-control" class="touch-control touch-control--ladder hidden">
         <label for="touch-ladder">LADDER</label>
+        <div class="ladder-slider" aria-hidden="true">
+          <div class="ladder-slider__track">
+            <div class="ladder-slider__rail ladder-slider__rail--top"></div>
+            <div class="ladder-slider__rail ladder-slider__rail--bottom"></div>
+            <div class="ladder-slider__rungs"></div>
+          </div>
+          <div class="ladder-slider__thumb"></div>
+          <div class="ladder-slider__thumb-grip"></div>
+          <div class="ladder-slider__wood-wear"></div>
+        </div>
         <input id="touch-ladder" type="range" min="-100" max="100" value="0" aria-label="Ladder position" />
       </div>
 
       <div id="pitch-control" class="touch-control touch-control--pitch hidden">
         <label for="touch-pitch">PITCH</label>
+        <div class="rev-rod" aria-hidden="true">
+          <div class="rev-rod__ticks"></div>
+          <div class="rev-rod__rail"></div>
+          <div class="rev-rod__oil-track"></div>
+          <div class="rev-rod__thumb"></div>
+          <div class="rev-rod__thumb-grip"></div>
+          <div class="rev-rod__metal-flakes"></div>
+        </div>
         <input id="touch-pitch" type="range" min="-100" max="100" value="0" orient="vertical" aria-label="Ladder pitch" />
       </div>
 
