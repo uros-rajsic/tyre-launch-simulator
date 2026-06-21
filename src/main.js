@@ -212,6 +212,8 @@ const state = {
   spentTyres: [],
   orphanTyres: [],
   tyreDisposals: [],
+  tyreDustPuffs: [],
+  tyreDustCarry: 0,
   birds: [],
   nextBirdTimer: 3.5,
   birdsHit: 0,
@@ -980,6 +982,16 @@ const dustCloud = new THREE.Mesh(
 dustCloud.scale.set(1.3, 0.55, 1.1);
 scene.add(dustCloud);
 
+const tyreDustGroup = new THREE.Group();
+scene.add(tyreDustGroup);
+const tyreDustGeometry = new THREE.SphereGeometry(1, 12, 8);
+const tyreDustMaterial = new THREE.MeshBasicMaterial({
+  color: 0xd8bd8c,
+  transparent: true,
+  opacity: 0,
+  depthWrite: false,
+});
+
 const engineExhaustGroup = new THREE.Group();
 engineExhaustGroup.position.set(-0.95, 1.72, 0.38);
 machineGroup.add(engineExhaustGroup);
@@ -1383,6 +1395,12 @@ function resetRound(keepScore = true, nextMode = "playing") {
     orphanTyreGroup.clear();
     state.tyreDisposals.forEach((effect) => scene.remove(effect.group));
     state.tyreDisposals.length = 0;
+    state.tyreDustPuffs.forEach((puff) => {
+      tyreDustGroup.remove(puff.mesh);
+      puff.mesh.material.dispose();
+    });
+    state.tyreDustPuffs.length = 0;
+    state.tyreDustCarry = 0;
     state.birds.length = 0;
     birdGroup.clear();
     state.nextBirdTimer = 3.5;
@@ -1677,6 +1695,7 @@ function strikeTyre(source = "keyboard") {
   state.striker.pushSpeed = 0;
   state.striker.cooldown = 0.35;
   state.dustBurst = 1;
+  spawnTyreDustBurst(state.tyre.position, state.tyre.velocity, state.tyre.spinRate, launchPower);
   playSound("stick");
   playSound("launchSkid");
   setMessage(state.flywheelSpin < 2.8 ? "The stick knocked it off cold. It is crawling." : "Friction caught. The tyre picked a lane. Hunt it with the ladder.");
@@ -2912,6 +2931,7 @@ function updateTyre(dt) {
       tyreState.position.y = groundY;
       tyreState.velocity.y = 0;
     }
+    emitRollingTyreDust(tyreState, dt, groundY, launchPower);
 
     if (
       launchPower < 0.18 &&
@@ -3355,6 +3375,105 @@ function updateBirds(dt) {
   }
 }
 
+function spawnTyreDustPuff(position, velocity, spinRate, power = 0.6, burst = false) {
+  const spinPower = THREE.MathUtils.clamp(spinRate / 62, 0, 1.25);
+  const horizontalSpeed = Math.hypot(velocity.x, velocity.z);
+  const speedPower = THREE.MathUtils.clamp(horizontalSpeed / 42, 0, 1.15);
+  const plumePower = THREE.MathUtils.clamp(spinPower * 0.72 + speedPower * 0.42 + power * 0.18, 0.08, 1.35);
+  const travel = tempVec.set(velocity.x, 0, velocity.z);
+  if (travel.lengthSq() < 0.0001) {
+    travel.set(0, 0, 1);
+  } else {
+    travel.normalize().multiplyScalar(-1);
+  }
+  const side = tempVec2.set(-travel.z, 0, travel.x);
+  const groundY = groundHeightAt(position.x, position.z);
+  const spread = burst ? 0.62 : 0.32;
+  const sideSpread = burst ? 0.26 + plumePower * 0.18 : 0.16 + plumePower * 0.12;
+  const puffPosition = new THREE.Vector3(
+    position.x + travel.x * (0.18 + Math.random() * spread) + side.x * (Math.random() - 0.5) * sideSpread,
+    groundY + 0.08 + Math.random() * 0.16,
+    position.z + travel.z * (0.18 + Math.random() * spread) + side.z * (Math.random() - 0.5) * sideSpread
+  );
+
+  const material = tyreDustMaterial.clone();
+  const mesh = new THREE.Mesh(tyreDustGeometry, material);
+  mesh.position.copy(puffPosition);
+  mesh.renderOrder = -0.5;
+  tyreDustGroup.add(mesh);
+
+  const scale = (burst ? 0.38 : 0.26) + plumePower * (burst ? 0.44 : 0.34) + Math.random() * 0.12;
+  const velocityJitter = burst ? 0.48 : 0.28;
+  state.tyreDustPuffs.push({
+    mesh,
+    material,
+    age: 0,
+    ttl: THREE.MathUtils.lerp(0.58, 1.18, THREE.MathUtils.clamp(plumePower, 0, 1)) + Math.random() * 0.18,
+    baseScale: scale,
+    power: plumePower,
+    velocity: new THREE.Vector3(
+      travel.x * (0.38 + plumePower * 1.15) + side.x * (Math.random() - 0.5) * velocityJitter,
+      0.58 + plumePower * 1.28 + Math.random() * 0.42,
+      travel.z * (0.38 + plumePower * 1.15) + side.z * (Math.random() - 0.5) * velocityJitter
+    ),
+  });
+}
+
+function spawnTyreDustBurst(position, velocity, spinRate, power = 0.8) {
+  const spinPower = THREE.MathUtils.clamp(spinRate / 62, 0, 1.15);
+  const count = Math.round(4 + spinPower * 8 + power * 4);
+  for (let i = 0; i < count; i++) {
+    spawnTyreDustPuff(position, velocity, spinRate, power, true);
+  }
+}
+
+function emitRollingTyreDust(tyreState, dt, groundY, launchPower = 0.5) {
+  const grounded = tyreState.position.y <= groundY + 0.2 || tyreState.slideTimer > 0;
+  if (!grounded) {
+    return;
+  }
+  const spinPower = THREE.MathUtils.clamp(tyreState.spinRate / 62, 0, 1.2);
+  const speedPower = THREE.MathUtils.clamp(Math.hypot(tyreState.velocity.x, tyreState.velocity.z) / 42, 0, 1.15);
+  const slideBite = tyreState.slideTimer > 0 ? 0.55 : 0;
+  const emission = (spinPower * 1.05 + speedPower * 0.55 + slideBite) * THREE.MathUtils.clamp(0.35 + launchPower, 0.25, 1.35);
+  if (emission <= 0.05) {
+    return;
+  }
+  state.tyreDustCarry += emission * dt * 16;
+  const maxSpawn = 3;
+  let spawned = 0;
+  while (state.tyreDustCarry >= 1 && spawned < maxSpawn) {
+    state.tyreDustCarry -= 1;
+    spawned += 1;
+    spawnTyreDustPuff(tyreState.position, tyreState.velocity, tyreState.spinRate, launchPower, false);
+  }
+}
+
+function updateTyreDustPuffs(dt) {
+  for (let i = state.tyreDustPuffs.length - 1; i >= 0; i--) {
+    const puff = state.tyreDustPuffs[i];
+    puff.age += dt;
+    const t = THREE.MathUtils.clamp(puff.age / puff.ttl, 0, 1);
+    puff.velocity.x = damping(puff.velocity.x, 0, 1.35, dt);
+    puff.velocity.z = damping(puff.velocity.z, 0, 1.35, dt);
+    puff.velocity.y = damping(puff.velocity.y, 0.22, 0.55, dt);
+    puff.mesh.position.addScaledVector(puff.velocity, dt);
+    const grow = 1 + t * (0.55 + puff.power * 0.65);
+    const riseGrow = 1 + t * (2.4 + puff.power * 1.65);
+    puff.mesh.scale.set(
+      puff.baseScale * grow * (0.48 + puff.power * 0.12),
+      puff.baseScale * riseGrow * (0.55 + puff.power * 0.18),
+      puff.baseScale * grow * (0.62 + puff.power * 0.16)
+    );
+    puff.material.opacity = Math.max(0, (1 - t) * (0.16 + puff.power * 0.26));
+    if (t >= 1) {
+      tyreDustGroup.remove(puff.mesh);
+      puff.material.dispose();
+      state.tyreDustPuffs.splice(i, 1);
+    }
+  }
+}
+
 function updateTyreDisposals(dt) {
   for (let i = state.tyreDisposals.length - 1; i >= 0; i--) {
     const effect = state.tyreDisposals[i];
@@ -3396,6 +3515,7 @@ function updateTyreDisposals(dt) {
 
 function updateEffects(dt) {
   updateTyreDisposals(dt);
+  updateTyreDustPuffs(dt);
   dustCloud.position.set(1.2, 0.9, world.machineZ - 0.8);
   dustCloud.material.opacity = state.dustBurst * 0.38;
   const dustScale = 1 + (1 - state.dustBurst) * 1.6;
@@ -4058,6 +4178,7 @@ window.render_game_to_text = () =>
     birdsHit: state.birdsHit,
     spentTyres: state.spentTyres.length,
     tyreDisposals: state.tyreDisposals.length,
+    tyreDustPuffs: state.tyreDustPuffs.length,
     spentTyrePositions: state.spentTyres.slice(-6).map((spent) => ({
       x: Number(spent.position.x.toFixed(2)),
       y: Number(spent.position.y.toFixed(2)),
