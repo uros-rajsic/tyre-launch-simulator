@@ -297,20 +297,26 @@ const STARTER_PULL_MAX_DISTANCE = 2.65;
 const STARTER_SLEEVE_RADIUS = 0.705;
 const STARTER_ROPE_RADIUS = 0.086;
 const STARTER_SLEEVE_LENGTH = 0.45;
+const FULLSPEED_LOOP_CROSSFADE_SECONDS = 0.11;
 
 const audioSystem = {
   ctx: null,
   master: null,
+  // Sample-based engine audio
+  idleBuffer: null,
+  fullspeedBuffer: null,
+  idleSource: null,
+  fullspeedSource: null,
+  idleGain: null,
+  fullspeedGain: null,
+  fullspeedFilter: null,
   engineGain: null,
-  engineLow: null,
-  engineRattle: null,
-  engineNoise: null,
-  engineNoiseGain: null,
-  engineNoiseFilter: null,
+  // Tyre skid (kept from original)
   tyreSkid: null,
   tyreSkidGain: null,
   tyreSkidFilter: null,
   started: false,
+  buffersLoaded: false,
 };
 
 const ambient = new THREE.HemisphereLight(0xfff6d9, 0x8a613a, 1.35);
@@ -1052,6 +1058,69 @@ function createNoiseBuffer(ctx, duration = 1) {
   return buffer;
 }
 
+function createSeamlessLoopBuffer(ctx, buffer, crossfadeSeconds) {
+  const fadeSamples = Math.min(
+    Math.floor(buffer.sampleRate * crossfadeSeconds),
+    Math.floor(buffer.length / 3),
+  );
+
+  if (fadeSamples < 2) {
+    return buffer;
+  }
+
+  const loopLength = buffer.length - fadeSamples;
+  const loopBuffer = ctx.createBuffer(buffer.numberOfChannels, loopLength, buffer.sampleRate);
+
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    const input = buffer.getChannelData(channel);
+    const output = loopBuffer.getChannelData(channel);
+
+    for (let i = 0; i < fadeSamples; i++) {
+      const fadeIn = i / (fadeSamples - 1);
+      const fadeOut = 1 - fadeIn;
+      output[i] = input[loopLength + i] * fadeOut + input[i] * fadeIn;
+    }
+
+    output.set(input.subarray(fadeSamples, loopLength), fadeSamples);
+  }
+
+  return loopBuffer;
+}
+
+// Load engine audio buffers from real recordings.
+async function loadEngineAudioBuffers(ctx) {
+  if (audioSystem.buffersLoaded) return;
+  try {
+    const [idleResp, fullResp] = await Promise.all([
+      fetch("./assets/start.mp3"),
+      fetch("./assets/fullspeed.mp3"),
+    ]);
+    const [idleArr, fullArr] = await Promise.all([
+      idleResp.arrayBuffer(),
+      fullResp.arrayBuffer(),
+    ]);
+    const [idleBuf, rawFullBuf] = await Promise.all([
+      ctx.decodeAudioData(idleArr),
+      ctx.decodeAudioData(fullArr),
+    ]);
+    const fullBuf = createSeamlessLoopBuffer(ctx, rawFullBuf, FULLSPEED_LOOP_CROSSFADE_SECONDS);
+    audioSystem.idleBuffer = idleBuf;
+    audioSystem.fullspeedBuffer = fullBuf;
+    audioSystem.buffersLoaded = true;
+  } catch (err) {
+    console.warn("Failed to load engine audio samples, falling back to silence", err);
+  }
+}
+
+// Helper: create a looping AudioBufferSourceNode.
+function createLoopingSource(ctx, buffer) {
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  src.loop = true;
+  src.start();
+  return src;
+}
+
 function ensureAudio() {
   if (state.audio.unavailable || audioSystem.started) {
     if (audioSystem.ctx?.state === "suspended") {
@@ -1080,43 +1149,27 @@ function ensureAudio() {
     compressor.connect(ctx.destination);
     master.connect(compressor);
 
+    // Engine gain: overall volume for engine samples.
     const engineGain = ctx.createGain();
     engineGain.gain.value = 0.0001;
     engineGain.connect(master);
 
-    const engineLow = ctx.createOscillator();
-    engineLow.type = "triangle";
-    engineLow.frequency.value = 20;
-    const lowFilter = ctx.createBiquadFilter();
-    lowFilter.type = "lowpass";
-    lowFilter.frequency.value = 92;
-    engineLow.connect(lowFilter);
-    lowFilter.connect(engineGain);
-    engineLow.start();
+    // Idle engine source: start.mp3.
+    const idleGain = ctx.createGain();
+    idleGain.gain.value = 0.0001;
+    idleGain.connect(engineGain);
 
-    const engineRattle = ctx.createOscillator();
-    engineRattle.type = "sawtooth";
-    engineRattle.frequency.value = 34;
-    const rattleGain = ctx.createGain();
-    rattleGain.gain.value = 0.045;
-    engineRattle.connect(rattleGain);
-    rattleGain.connect(engineGain);
-    engineRattle.start();
+    // Full-speed engine source: fullspeed.mp3.
+    const fullspeedGain = ctx.createGain();
+    fullspeedGain.gain.value = 0.0001;
+    const fullspeedFilter = ctx.createBiquadFilter();
+    fullspeedFilter.type = "lowpass";
+    fullspeedFilter.frequency.value = 600;
+    fullspeedFilter.Q.value = 0.7;
+    fullspeedGain.connect(fullspeedFilter);
+    fullspeedFilter.connect(engineGain);
 
-    const engineNoise = ctx.createBufferSource();
-    engineNoise.buffer = createNoiseBuffer(ctx, 1.2);
-    engineNoise.loop = true;
-    const engineNoiseFilter = ctx.createBiquadFilter();
-    engineNoiseFilter.type = "bandpass";
-    engineNoiseFilter.frequency.value = 260;
-    engineNoiseFilter.Q.value = 0.9;
-    const engineNoiseGain = ctx.createGain();
-    engineNoiseGain.gain.value = 0.0001;
-    engineNoise.connect(engineNoiseFilter);
-    engineNoiseFilter.connect(engineNoiseGain);
-    engineNoiseGain.connect(master);
-    engineNoise.start();
-
+    // Tyre skid: kept from the original synth implementation.
     const tyreSkid = ctx.createBufferSource();
     tyreSkid.buffer = createNoiseBuffer(ctx, 1.5);
     tyreSkid.loop = true;
@@ -1135,11 +1188,9 @@ function ensureAudio() {
       ctx,
       master,
       engineGain,
-      engineLow,
-      engineRattle,
-      engineNoise,
-      engineNoiseGain,
-      engineNoiseFilter,
+      idleGain,
+      fullspeedGain,
+      fullspeedFilter,
       tyreSkid,
       tyreSkidGain,
       tyreSkidFilter,
@@ -1149,6 +1200,20 @@ function ensureAudio() {
     if (ctx.state === "suspended") {
       ctx.resume();
     }
+
+    // Load audio buffers asynchronously, then wire up looping sources.
+    loadEngineAudioBuffers(ctx).then(() => {
+      if (audioSystem.buffersLoaded) {
+        const idleSrc = createLoopingSource(ctx, audioSystem.idleBuffer);
+        idleSrc.connect(audioSystem.idleGain);
+        audioSystem.idleSource = idleSrc;
+
+        const fullSrc = createLoopingSource(ctx, audioSystem.fullspeedBuffer);
+        fullSrc.connect(audioSystem.fullspeedGain);
+        audioSystem.fullspeedSource = fullSrc;
+      }
+    });
+
     return true;
   } catch (error) {
     state.audio.unavailable = true;
@@ -1280,14 +1345,42 @@ function updateAudio(dt) {
   const now = ctx.currentTime;
   const engineActive = state.engineStarted || state.engineStarting || state.flywheelSpin > 0.15;
   const rpm = state.engineStarting ? 0.22 : THREE.MathUtils.clamp(state.flywheelSpin / 8.8, 0, 1);
-  const pulse = engineActive ? 0.62 + Math.pow(Math.sin(state.smokeTime * (3.3 + rpm * 4.5)) * 0.5 + 0.5, 2.4) * 0.72 : 0;
-  const dieselGain = engineActive ? (0.038 + rpm * 0.105 + state.throttle * 0.035) * pulse : 0.0001;
-  audioSystem.engineGain.gain.setTargetAtTime(dieselGain, now, 0.08);
-  audioSystem.engineLow.frequency.setTargetAtTime(18 + rpm * 18 + state.throttle * 3, now, 0.08);
-  audioSystem.engineRattle.frequency.setTargetAtTime(30 + rpm * 28, now, 0.05);
-  audioSystem.engineNoiseGain.gain.setTargetAtTime(engineActive ? 0.003 + rpm * 0.012 : 0.0001, now, 0.08);
-  audioSystem.engineNoiseFilter.frequency.setTargetAtTime(150 + rpm * 260, now, 0.06);
 
+  // Sample-based engine audio: crossfade idle to fullspeed.
+  const IDLE_CEILING = 0.05; // rpm fraction where idle fully fades out
+  const XFADE_BAND = 0.04;   // crossfade width around the 5% threshold
+
+  if (audioSystem.buffersLoaded && audioSystem.idleSource && audioSystem.fullspeedSource) {
+    // Master engine gain: audible when engine active, silent otherwise
+    const engineMaster = engineActive ? 0.85 + state.throttle * 0.15 : 0.0001;
+    audioSystem.engineGain.gain.setTargetAtTime(engineMaster, now, 0.08);
+
+    // Crossfade: idle plays 0-5%, fullspeed takes over from about 3% up.
+    const idleFade = engineActive ? THREE.MathUtils.smoothstep(1 - (rpm - (IDLE_CEILING - XFADE_BAND)) / XFADE_BAND, 0, 1) : 0;
+    const fullFade = engineActive ? THREE.MathUtils.smoothstep((rpm - (IDLE_CEILING - XFADE_BAND)) / XFADE_BAND, 0, 1) : 0;
+
+    audioSystem.idleGain.gain.setTargetAtTime(Math.max(0.0001, idleFade), now, 0.06);
+    audioSystem.fullspeedGain.gain.setTargetAtTime(Math.max(0.0001, fullFade), now, 0.06);
+
+    // Playback rate: slow down the fullspeed sample at lower revs
+    // At 5% rpm the rate is about 0.55; at 100% it is 1.0.
+    const rpmAboveIdle = THREE.MathUtils.clamp((rpm - IDLE_CEILING) / (1 - IDLE_CEILING), 0, 1);
+    const playbackRate = 0.55 + rpmAboveIdle * 0.45;
+    audioSystem.fullspeedSource.playbackRate.setTargetAtTime(playbackRate, now, 0.1);
+
+    // Low-pass filter: muffle at low revs, open up at high revs.
+    const filterFreq = 800 + rpmAboveIdle * 19200; // 800 Hz to 20000 Hz
+    audioSystem.fullspeedFilter.frequency.setTargetAtTime(filterFreq, now, 0.08);
+
+    // Idle playback rate: slight variation for life
+    const idleRate = engineActive ? 0.92 + Math.sin(state.smokeTime * 1.8) * 0.04 : 1;
+    audioSystem.idleSource.playbackRate.setTargetAtTime(idleRate, now, 0.12);
+  } else {
+    // Buffers not loaded yet: keep engine silent.
+    audioSystem.engineGain.gain.setTargetAtTime(0.0001, now, 0.08);
+  }
+
+  // Tyre skid: unchanged from the original.
   const tyreSpeed = Math.hypot(state.tyre.velocity.x, state.tyre.velocity.z);
   let skidTarget = 0;
   if (state.tyre.phase === "mounted" && state.flywheelSpin > 2.5) {
@@ -1301,6 +1394,7 @@ function updateAudio(dt) {
   audioSystem.tyreSkidGain.gain.setTargetAtTime(Math.max(0.0001, state.audio.skidLevel), now, 0.04);
   audioSystem.tyreSkidFilter.frequency.setTargetAtTime(680 + state.audio.skidLevel * 5200 + tyreSpeed * 55, now, 0.05);
 
+  // Diesel chug bursts: kept for mechanical flavor.
   state.audio.chugTimer -= dt;
   if (engineActive && state.audio.chugTimer <= 0) {
     playDieselChug();

@@ -1,4 +1,4 @@
-const CACHE_NAME = "tyre-chimney-v1";
+const CACHE_NAME = "tyre-chimney-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -8,7 +8,9 @@ const APP_SHELL = [
   "./manifest.webmanifest",
   "./assets/icons/icon.svg",
   "./assets/icons/icon-192.png",
-  "./assets/icons/icon-512.png"
+  "./assets/icons/icon-512.png",
+  "./assets/start.mp3",
+  "./assets/fullspeed.mp3"
 ];
 
 self.addEventListener("install", (event) => {
@@ -40,7 +42,7 @@ self.addEventListener("fetch", (event) => {
         const shouldCache =
           response.ok &&
           url.origin === self.location.origin &&
-          ["document", "script", "style", "image", "manifest", ""].includes(request.destination);
+          ["document", "script", "style", "image", "manifest", "audio", ""].includes(request.destination);
 
         if (shouldCache || url.pathname.endsWith(".glb")) {
           const copy = response.clone();
