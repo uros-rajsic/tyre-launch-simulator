@@ -402,19 +402,31 @@ function accessorArray(json, buffer, binOffset, accessorIndex) {
 function makeTextureFromEmbeddedImage(json, buffer, binOffset, imageIndex) {
   const image = json.images?.[imageIndex];
   if (!image || image.bufferView === undefined) {
-    return null;
+    return Promise.resolve(null);
   }
   const bufferView = json.bufferViews[image.bufferView];
   const start = binOffset + (bufferView.byteOffset || 0);
   const bytes = new Uint8Array(buffer, start, bufferView.byteLength);
   const blob = new Blob([bytes], { type: image.mimeType || "image/png" });
   const url = URL.createObjectURL(blob);
-  const texture = new THREE.TextureLoader().load(url, () => URL.revokeObjectURL(url));
-  texture.flipY = false;
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
-  texture.colorSpace = THREE.SRGBColorSpace || THREE.sRGBEncoding;
-  return texture;
+  return new Promise((resolve, reject) => {
+    new THREE.TextureLoader().load(
+      url,
+      (texture) => {
+        URL.revokeObjectURL(url);
+        texture.flipY = false;
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.colorSpace = THREE.SRGBColorSpace || THREE.sRGBEncoding;
+        resolve(texture);
+      },
+      undefined,
+      (error) => {
+        URL.revokeObjectURL(url);
+        reject(error);
+      }
+    );
+  });
 }
 
 function decodeBase64ChunksToArrayBuffer(chunks) {
@@ -426,7 +438,7 @@ function decodeBase64ChunksToArrayBuffer(chunks) {
   return bytes.buffer;
 }
 
-function createMeshFromGlbBuffer(buffer) {
+async function createMeshFromGlbBuffer(buffer) {
   const view = new DataView(buffer);
   if (view.getUint32(0, true) !== 0x46546c67) {
     throw new Error("Asset is not a GLB file.");
@@ -475,7 +487,7 @@ function createMeshFromGlbBuffer(buffer) {
     textureIndex !== undefined
       ? json.textures?.[textureIndex]?.extensions?.EXT_texture_webp?.source ?? json.textures?.[textureIndex]?.source
       : undefined;
-  const map = textureSource !== undefined ? makeTextureFromEmbeddedImage(json, buffer, binOffset, textureSource) : null;
+  const map = textureSource !== undefined ? await makeTextureFromEmbeddedImage(json, buffer, binOffset, textureSource) : null;
   const material = new THREE.MeshStandardMaterial({
     map,
     color: map ? 0xffffff : 0x49614e,
@@ -513,7 +525,6 @@ function installMachineModel(mesh, json, sourceName) {
   mesh.position.copy(ENGINE_MODEL_POSITION);
   mesh.rotation.y = Math.PI;
   machineGroup.add(mesh);
-  state.engineModelLoaded = true;
   state.engineModelInfo = `${sourceName}: ${json.nodes?.length || 0} nodes / ${json.meshes?.length || 0} mesh`;
 }
 
@@ -673,6 +684,7 @@ const MODEL_FILE_BYTES = {
 const modelLoadingState = Object.fromEntries(
   Object.entries(MODEL_FILE_BYTES).map(([name, total]) => [name, { loaded: 0, total, done: false, failed: false }])
 );
+let loadingCompletionQueued = false;
 updateLoadingScreen();
 
 function updateLoadingScreen() {
@@ -692,8 +704,14 @@ function updateLoadingScreen() {
 
   if (completedFiles === files.length) {
     loadingTitle.textContent = failedFiles > 0 ? "Some models failed" : "Ready";
-    startButton.disabled = false;
-    window.setTimeout(() => loadingScreen.classList.add("is-complete"), failedFiles > 0 ? 900 : 240);
+    const installedOrFailed = failedFiles > 0 || (state.engineModelLoaded && state.gameplayModelsLoaded);
+    if (installedOrFailed && !loadingCompletionQueued) {
+      loadingCompletionQueued = true;
+      startButton.disabled = false;
+      window.setTimeout(() => loadingScreen.classList.add("is-complete"), failedFiles > 0 ? 900 : 240);
+    } else if (!installedOrFailed) {
+      loadingTitle.textContent = "Finalizing models";
+    }
   }
 }
 
@@ -757,7 +775,7 @@ async function loadRequiredGlb(sourceName) {
       throw new Error(`Could not load ${sourceName}: ${response.status} ${response.statusText}`);
     }
     const buffer = await readResponseArrayBufferWithProgress(response, sourceName);
-    const asset = createMeshFromGlbBuffer(buffer);
+    const asset = await createMeshFromGlbBuffer(buffer);
     finishModelLoad(sourceName);
     return asset;
   } catch (error) {
@@ -781,9 +799,11 @@ async function installSplitEngineModels() {
     installBuildingModel(buildingAsset.mesh, buildingAsset.json, "building.glb");
     installWellModel(wellAsset.mesh, wellAsset.json, "well.glb");
     state.engineModelLoaded = true;
+    updateLoadingScreen();
   } catch (error) {
     console.error("Could not load required split engine models:", error);
     state.engineModelInfo = "missing required split GLB models";
+    updateLoadingScreen();
   }
 }
 
@@ -968,9 +988,11 @@ async function installGameplayModels() {
     installStickModel(stickAsset.mesh, stickAsset.json, "stick.glb");
     installTyreModel(tyreAsset.mesh, tyreAsset.json, "tyre.glb");
     state.gameplayModelsLoaded = true;
+    updateLoadingScreen();
   } catch (error) {
     console.error("Could not load required gameplay models:", error);
     state.engineModelInfo += " + missing required gameplay GLB models";
+    updateLoadingScreen();
   }
 }
 
