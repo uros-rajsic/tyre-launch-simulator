@@ -1,4 +1,4 @@
-const CACHE_NAME = "tyre-chimney-v2";
+const CACHE_NAME = "tyre-chimney-v3";
 const APP_SHELL = [
   "./",
   "./index.html",

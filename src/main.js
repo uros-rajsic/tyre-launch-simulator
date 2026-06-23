@@ -3719,30 +3719,19 @@ function updateCamera(dt) {
     );
     const airborneView = tyrePhase === "flying" || tyrePhase === "scored";
     const chimneyApproach = THREE.MathUtils.smoothstep(flightProgress, 0.82, 1.0);
-    const isWellScore = tyrePhase === "scored" && state.tyre.scoreTarget === "well";
-    const wellApproach = isWellScore
-      ? 1
-      : THREE.MathUtils.smoothstep((world.chimneyZ - tyrePosition.z) / Math.max(1, world.chimneyZ - world.wellZ), 0.02, 0.92);
-    const terminalTargetZ = THREE.MathUtils.lerp(world.chimneyZ, world.wellZ, wellApproach);
-    const chimneyCameraStopZ = THREE.MathUtils.lerp(world.chimneyZ + 28, world.wellZ + 30, wellApproach);
-    const chimneyTargetStopZ = THREE.MathUtils.lerp(world.chimneyZ - 4, world.wellZ - 2, wellApproach);
     const chaseZ = airborneView
-      ? THREE.MathUtils.clamp(tyrePosition.z + THREE.MathUtils.lerp(10.5, 22, wellApproach), chimneyCameraStopZ, 18)
+      ? THREE.MathUtils.clamp(tyrePosition.z + 10.5 + chimneyApproach * 7.5, world.chimneyZ - 260, 18)
       : THREE.MathUtils.clamp(tyrePosition.z + 24.5, -25, 23.5);
     const targetHeight =
       tyrePhase === "scored"
-        ? (isWellScore ? world.wellHeight + 3.2 : world.chimneyHeight + 2.6)
+        ? tyrePosition.y + 0.6
         : airborneView ? tyrePosition.y + 0.6 : tyrePosition.y * 0.72 + 3.0;
-    const airborneCameraX = THREE.MathUtils.lerp(
-      (airborneView ? -6.2 - chimneyApproach * 3.2 : -1.8) + tyrePosition.x * (airborneView ? 0.62 : 0.14),
-      world.wellX - 8 + tyrePosition.x * 0.16,
-      wellApproach
-    );
+    const airborneCameraX = (airborneView ? -6.2 - chimneyApproach * 3.2 : -1.8) + tyrePosition.x * (airborneView ? 0.62 : 0.14);
 
     desiredCameraPosition.set(
       THREE.MathUtils.clamp(airborneCameraX, -18, 30),
       THREE.MathUtils.clamp(
-        airborneView ? tyrePosition.y + THREE.MathUtils.lerp(28.0 + chimneyApproach * 20.0, 18.0, wellApproach) : 7.2 + tyrePosition.y * 0.18 + flightProgress * 4.2,
+        airborneView ? tyrePosition.y + 28.0 + chimneyApproach * 12.0 : 7.2 + tyrePosition.y * 0.18 + flightProgress * 4.2,
         airborneView ? 18 : 6.8,
         airborneView ? 260 : 96
       ),
@@ -3750,11 +3739,11 @@ function updateCamera(dt) {
     );
     desiredCameraTarget.set(
       airborneView
-        ? THREE.MathUtils.lerp(tyrePosition.x * 0.82, world.wellX, wellApproach * 0.96)
+        ? tyrePosition.x * 0.82
         : tyrePosition.x * 0.42,
-      THREE.MathUtils.clamp(targetHeight + (airborneView ? THREE.MathUtils.lerp(-10.0 - chimneyApproach * 5.0, 1.8, wellApproach) : 2.6), isWellScore ? 1.8 : 6.2, airborneView ? 240 : world.chimneyHeight + 12.5),
+      THREE.MathUtils.clamp(targetHeight + (airborneView ? -10.0 - chimneyApproach * 5.0 : 2.6), 6.2, airborneView ? 240 : world.chimneyHeight + 12.5),
       airborneView
-        ? Math.max(THREE.MathUtils.lerp(tyrePosition.z - 1.6, terminalTargetZ, THREE.MathUtils.lerp(flightProgress * 0.5, 0.8, wellApproach)), chimneyTargetStopZ)
+        ? tyrePosition.z - 1.6
         : THREE.MathUtils.lerp(tyrePosition.z - 8, world.chimneyZ, flightProgress * 0.55)
     );
   } else {
@@ -3857,8 +3846,10 @@ function releaseFlightStick() {
 
 function verticalControlValueFromPointer(control, event) {
   const rect = control.getBoundingClientRect();
-  const top = rect.top + 24;
-  const bottom = rect.bottom - 24;
+  const style = getComputedStyle(control);
+  const inset = Number.parseFloat(style.getPropertyValue("--vertical-control-inset")) || 18;
+  const top = rect.top + inset;
+  const bottom = rect.bottom - inset;
   const span = Math.max(1, bottom - top);
   return THREE.MathUtils.clamp(1 - (event.clientY - top) / span, 0, 1);
 }
@@ -3886,6 +3877,29 @@ function setTouchPitchFromPointer(event) {
     touchPitch.value = Math.round((state.ladderTilt / 0.38) * 100);
   }
   updateTouchPitchVisual();
+  updateHud();
+}
+
+function horizontalControlValueFromPointer(control, event) {
+  const rect = control.getBoundingClientRect();
+  const style = getComputedStyle(control);
+  const inset = Number.parseFloat(style.getPropertyValue("--ladder-track-inset")) || 22;
+  const left = rect.left + inset;
+  const right = rect.right - inset;
+  const span = Math.max(1, right - left);
+  return THREE.MathUtils.clamp((event.clientX - left) / span, 0, 1);
+}
+
+function setTouchLadderFromPointer(event) {
+  if (!touchInput.ladderActive || !ladderControl) {
+    return;
+  }
+  const value = horizontalControlValueFromPointer(ladderControl, event);
+  state.ladderOffset = THREE.MathUtils.clamp((value * 2 - 1) * LADDER_RANGE, -LADDER_RANGE, LADDER_RANGE);
+  if (touchLadder) {
+    touchLadder.value = Math.round((state.ladderOffset / LADDER_RANGE) * 100);
+  }
+  updateTouchLadderVisual();
   updateHud();
 }
 
@@ -3978,6 +3992,32 @@ function installTouchControls() {
       touchInput.ladderDragging = false;
       updateTouchLadderVisual();
     });
+  }
+
+  if (ladderControl) {
+    ladderControl.addEventListener("pointerdown", (event) => {
+      if (!touchInput.ladderActive) {
+        return;
+      }
+      touchInput.ladderDragging = true;
+      ladderControl.setPointerCapture?.(event.pointerId);
+      setTouchLadderFromPointer(event);
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    ladderControl.addEventListener("pointermove", (event) => {
+      if (!touchInput.ladderDragging) {
+        return;
+      }
+      setTouchLadderFromPointer(event);
+      event.preventDefault();
+    });
+    const endLadderDrag = () => {
+      touchInput.ladderDragging = false;
+      updateTouchLadderVisual();
+    };
+    ladderControl.addEventListener("pointerup", endLadderDrag);
+    ladderControl.addEventListener("pointercancel", endLadderDrag);
   }
 
   if (touchPitch) {

@@ -308,16 +308,21 @@ button:disabled {
 .touch-control--throttle,
 .touch-control--pitch {
   right: max(14px, env(safe-area-inset-right));
-  top: 45%;
+  top: 42%;
   transform: translateY(-50%);
 }
 
 .touch-control--throttle,
 .touch-control--pitch {
   --value: 0;
-  width: 112px;
-  height: 340px;
-  filter: drop-shadow(0 12px 9px rgba(0, 0, 0, 0.28));
+  --vertical-control-width: 76px;
+  --vertical-control-height: 276px;
+  --vertical-control-inset: 18px;
+  --rev-thumb-bottom: 230px;
+  --rev-thumb-travel: 212px;
+  width: var(--vertical-control-width);
+  height: var(--vertical-control-height);
+  filter: drop-shadow(0 9px 7px rgba(0, 0, 0, 0.26));
 }
 
 .touch-control--pitch {
@@ -330,8 +335,8 @@ button:disabled {
   appearance: slider-vertical;
   position: absolute;
   inset: 0;
-  width: 112px;
-  height: 340px;
+  width: var(--vertical-control-width);
+  height: var(--vertical-control-height);
   writing-mode: vertical-lr;
   direction: rtl;
   opacity: 0;
@@ -347,18 +352,18 @@ button:disabled {
 .rev-rod__rail {
   position: absolute;
   left: 50%;
-  top: 24px;
-  bottom: 24px;
-  width: 9px;
+  top: var(--vertical-control-inset);
+  bottom: var(--vertical-control-inset);
+  width: 6px;
   transform: translateX(-50%);
   border-radius: 999px;
   background:
     linear-gradient(90deg, #020201, #151209 35%, #7b673c 50%, #070604 66%, #010101);
   box-shadow:
-    inset 0 0 8px rgba(0, 0, 0, 0.95),
-    0 0 0 2px rgba(6, 14, 10, 0.95),
-    0 0 0 4px rgba(22, 79, 59, 0.75),
-    0 5px 8px rgba(0, 0, 0, 0.25);
+    inset 0 0 6px rgba(0, 0, 0, 0.95),
+    0 0 0 1px rgba(6, 14, 10, 0.95),
+    0 0 0 3px rgba(22, 79, 59, 0.66),
+    0 4px 6px rgba(0, 0, 0, 0.24);
 }
 
 .rev-rod__rail::before,
@@ -366,23 +371,23 @@ button:disabled {
   content: "";
   position: absolute;
   left: 50%;
-  width: 30px;
-  height: 12px;
+  width: 26px;
+  height: 10px;
   transform: translateX(-50%);
   border-radius: 3px;
   background:
     linear-gradient(90deg, rgba(0, 0, 0, 0.38), rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.32)),
     linear-gradient(#185f48, #0b2b21);
   border: 2px solid #050e0a;
-  box-shadow: inset 0 -4px 5px rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 -3px 4px rgba(0, 0, 0, 0.35);
 }
 
 .rev-rod__rail::before {
-  top: -8px;
+  top: -7px;
 }
 
 .rev-rod__rail::after {
-  bottom: -8px;
+  bottom: -7px;
 }
 
 .rev-rod__ticks {
@@ -392,15 +397,15 @@ button:disabled {
 .rev-rod__oil-track {
   position: absolute;
   left: 50%;
-  top: 28px;
-  bottom: 28px;
-  width: 31px;
+  top: 21px;
+  bottom: 21px;
+  width: 22px;
   transform: translateX(-50%);
   border-radius: 999px;
   background:
-    radial-gradient(ellipse at 19px 58px, rgba(0, 0, 0, 0.24) 0 4px, transparent 10px),
-    radial-gradient(ellipse at 10px 168px, rgba(0, 0, 0, 0.18) 0 4px, transparent 10px),
-    radial-gradient(ellipse at 22px 250px, rgba(98, 49, 19, 0.2) 0 4px, transparent 10px);
+    radial-gradient(ellipse at 14px 48px, rgba(0, 0, 0, 0.24) 0 3px, transparent 8px),
+    radial-gradient(ellipse at 8px 138px, rgba(0, 0, 0, 0.18) 0 3px, transparent 8px),
+    radial-gradient(ellipse at 16px 210px, rgba(98, 49, 19, 0.2) 0 3px, transparent 8px);
   mix-blend-mode: multiply;
   opacity: 0.9;
 }
@@ -408,20 +413,20 @@ button:disabled {
 .rev-rod__thumb {
   position: absolute;
   left: 50%;
-  top: calc(278px - (254px * var(--value)));
-  width: 46px;
-  height: 34px;
+  top: calc(var(--rev-thumb-bottom) - (var(--rev-thumb-travel) * var(--value)));
+  width: 38px;
+  height: 28px;
   transform: translateX(-50%);
   border-radius: 5px;
   background:
     linear-gradient(100deg, transparent 0 44%, rgba(255, 255, 255, 0.04) 45%, transparent 55%),
     linear-gradient(90deg, rgba(0, 0, 0, 0.34), rgba(255, 255, 255, 0.035) 25%, rgba(0, 0, 0, 0.28)),
     linear-gradient(#c83c2f, #8e1914 64%, #47100d);
-  border: 3px solid rgba(0, 0, 0, 0.72);
+  border: 2px solid rgba(0, 0, 0, 0.72);
   box-shadow:
-    inset 0 -10px 9px rgba(0, 0, 0, 0.34),
+    inset 0 -8px 7px rgba(0, 0, 0, 0.34),
     inset 0 1px 1px rgba(255, 255, 255, 0.04),
-    0 7px 9px rgba(0, 0, 0, 0.35);
+    0 5px 7px rgba(0, 0, 0, 0.35);
   z-index: 5;
 }
 
@@ -430,8 +435,8 @@ button:disabled {
   content: "";
   position: absolute;
   top: 50%;
-  width: 9px;
-  height: 9px;
+  width: 7px;
+  height: 7px;
   transform: translateY(-50%);
   border-radius: 50%;
   background:
@@ -441,19 +446,19 @@ button:disabled {
 }
 
 .rev-rod__thumb::before {
-  left: 8px;
+  left: 7px;
 }
 
 .rev-rod__thumb::after {
-  right: 8px;
+  right: 7px;
 }
 
 .rev-rod__thumb-grip {
   position: absolute;
   left: 50%;
-  top: calc(278px - (254px * var(--value)) + 15px);
-  width: 22px;
-  height: 6px;
+  top: calc(var(--rev-thumb-bottom) - (var(--rev-thumb-travel) * var(--value)) + 12px);
+  width: 18px;
+  height: 5px;
   transform: translateX(-50%);
   border-radius: 999px;
   background: rgba(45, 10, 8, 0.55);
@@ -465,10 +470,10 @@ button:disabled {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 34px 38px, rgba(255, 255, 255, 0.08) 0 1px, transparent 2px),
-    radial-gradient(circle at 44px 112px, rgba(0, 0, 0, 0.18) 0 2px, transparent 5px),
-    radial-gradient(circle at 29px 210px, rgba(0, 0, 0, 0.16) 0 2px, transparent 5px),
-    radial-gradient(circle at 49px 292px, rgba(128, 60, 25, 0.18) 0 2px, transparent 5px);
+    radial-gradient(circle at 25px 31px, rgba(255, 255, 255, 0.08) 0 1px, transparent 2px),
+    radial-gradient(circle at 31px 92px, rgba(0, 0, 0, 0.18) 0 2px, transparent 4px),
+    radial-gradient(circle at 22px 170px, rgba(0, 0, 0, 0.16) 0 2px, transparent 4px),
+    radial-gradient(circle at 35px 236px, rgba(128, 60, 25, 0.18) 0 2px, transparent 4px);
   opacity: 0.9;
   z-index: 7;
 }
@@ -488,11 +493,15 @@ button:disabled {
 
 .touch-control--ladder {
   --value: 0.5;
+  --ladder-track-inset: 28px;
+  --ladder-track-double-inset: 56px;
+  --ladder-thumb-width: 48px;
+  --ladder-thumb-half: 24px;
   left: max(18px, env(safe-area-inset-left));
   right: max(92px, env(safe-area-inset-right));
-  bottom: max(96px, calc(env(safe-area-inset-bottom) + 74px));
+  bottom: max(64px, calc(env(safe-area-inset-bottom) + 42px));
   width: min(390px, calc(100vw - 36px));
-  height: 86px;
+  height: 150px;
   filter: drop-shadow(0 10px 8px rgba(0, 0, 0, 0.22));
   justify-items: stretch;
 }
@@ -505,8 +514,9 @@ button:disabled {
   position: absolute;
   inset: 0;
   width: 100%;
-  height: 86px;
+  height: 100%;
   opacity: 0;
+  pointer-events: none;
 }
 
 .ladder-slider {
@@ -517,105 +527,69 @@ button:disabled {
 
 .ladder-slider__track {
   position: absolute;
-  left: 22px;
-  right: 22px;
+  left: var(--ladder-track-inset);
+  right: var(--ladder-track-inset);
   top: 50%;
-  height: 42px;
+  height: 28px;
   transform: translateY(-50%);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 240, 196, 0.16), transparent 35%, rgba(49, 30, 15, 0.18)),
+    linear-gradient(90deg, rgba(56, 34, 17, 0.55), rgba(125, 83, 43, 0.72), rgba(58, 35, 17, 0.55));
+  border: 2px solid rgba(54, 33, 16, 0.62);
+  box-shadow:
+    inset 0 3px 5px rgba(255, 235, 180, 0.1),
+    inset 0 -5px 8px rgba(0, 0, 0, 0.22),
+    0 9px 12px rgba(0, 0, 0, 0.18);
 }
 
 .ladder-slider__rail {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 10px;
-  border-radius: 5px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.1), transparent 28%),
-    linear-gradient(90deg, #4b2f18, #8a5b2f 20%, #9b6a3b 50%, #724622 78%, #412713);
-  border: 2px solid rgba(48, 28, 13, 0.72);
-  box-shadow:
-    inset 0 -3px 4px rgba(0, 0, 0, 0.22),
-    inset 0 1px 1px rgba(255, 255, 255, 0.08);
-}
-
-.ladder-slider__rail--top {
-  top: 0;
-}
-
-.ladder-slider__rail--bottom {
-  bottom: 0;
+  display: none;
 }
 
 .ladder-slider__rail::before,
 .ladder-slider__rail::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  width: 8px;
-  height: 8px;
-  transform: translateY(-50%);
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.12), transparent 20%),
-    linear-gradient(#2f2a23, #0f0d0a);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45);
-  opacity: 0.9;
-}
-
-.ladder-slider__rail::before {
-  left: 8px;
-}
-
-.ladder-slider__rail::after {
-  right: 8px;
+  display: none;
 }
 
 .ladder-slider__rungs {
   position: absolute;
-  left: 12px;
-  right: 12px;
-  top: 9px;
-  bottom: 9px;
-  border-radius: 8px;
-  background:
-    repeating-linear-gradient(
-      to right,
-      transparent 0 24px,
-      #7f542d 24px 31px,
-      #b07a46 31px 33px,
-      #724720 33px 40px,
-      transparent 40px 48px
-    );
-  opacity: 0.95;
+  left: 15px;
+  right: 15px;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  background: rgba(34, 20, 10, 0.34);
+  opacity: 0.8;
 }
 
 .ladder-slider__rungs::before {
   content: "";
   position: absolute;
-  inset: 0;
-  border-radius: 8px;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+  border-radius: 999px;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.08), transparent 30%, transparent 70%, rgba(0, 0, 0, 0.1));
-  mix-blend-mode: multiply;
+    repeating-linear-gradient(90deg, rgba(255, 228, 171, 0.18) 0 1px, transparent 1px 34px);
 }
 
 .ladder-slider__thumb {
   position: absolute;
-  left: calc(22px + ((100% - 44px) * var(--value)) - 28px);
+  left: calc(var(--ladder-track-inset) + ((100% - var(--ladder-track-double-inset)) * var(--value)) - var(--ladder-thumb-half));
   top: 50%;
-  width: 56px;
-  height: 56px;
+  width: var(--ladder-thumb-width);
+  height: 92px;
   transform: translateY(-50%);
-  border-radius: 8px;
+  border-radius: 4px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 24%),
-    linear-gradient(90deg, #4b2d17, #88572d 22%, #9f6b3b 50%, #724520 78%, #442814);
-  border: 3px solid rgba(45, 27, 13, 0.82);
-  box-shadow:
-    inset 0 -9px 10px rgba(0, 0, 0, 0.24),
-    inset 0 1px 1px rgba(255, 255, 255, 0.08),
-    0 7px 9px rgba(0, 0, 0, 0.28);
+    linear-gradient(90deg, transparent 0 6px, #3b2310 6px 9px, #a16a35 9px 13px, #4b2c14 13px 16px, transparent 16px calc(100% - 16px), #3b2310 calc(100% - 16px) calc(100% - 13px), #a16a35 calc(100% - 13px) calc(100% - 9px), #4b2c14 calc(100% - 9px) calc(100% - 6px), transparent calc(100% - 6px)),
+    linear-gradient(90deg, transparent 0 10px, rgba(255, 232, 176, 0.12) 10px 12px, transparent 12px calc(100% - 12px), rgba(255, 232, 176, 0.12) calc(100% - 12px) calc(100% - 10px), transparent calc(100% - 10px));
+  border: 0;
+  filter: drop-shadow(0 10px 7px rgba(0, 0, 0, 0.28));
   z-index: 5;
 }
 
@@ -623,38 +597,38 @@ button:disabled {
 .ladder-slider__thumb::after {
   content: "";
   position: absolute;
-  left: 50%;
-  width: 40px;
-  height: 6px;
-  transform: translateX(-50%);
-  border-radius: 4px;
-  background:
-    linear-gradient(90deg, #684120, #b47e4b 50%, #633d1d);
-  border: 1px solid rgba(64, 35, 15, 0.6);
-  box-shadow: inset 0 -1px 2px rgba(0, 0, 0, 0.18);
 }
 
 .ladder-slider__thumb::before {
-  top: 13px;
+  left: 11px;
+  right: 11px;
+  top: 10px;
+  bottom: 10px;
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0 9px,
+      #4f2f16 9px 12px,
+      #b57a3e 12px 16px,
+      #6d421f 16px 18px,
+      transparent 18px 26px
+    );
+  box-shadow: inset 0 0 0 1px rgba(52, 30, 13, 0.24);
 }
 
 .ladder-slider__thumb::after {
-  bottom: 13px;
+  inset: 7px 6px;
+  border-radius: 4px;
+  background:
+    linear-gradient(110deg, transparent 0 52%, rgba(0, 0, 0, 0.1) 53% 56%, transparent 57%),
+    radial-gradient(circle at 25% 20%, rgba(255, 238, 181, 0.16) 0 1px, transparent 3px),
+    radial-gradient(circle at 74% 70%, rgba(45, 23, 10, 0.22) 0 2px, transparent 5px);
+  pointer-events: none;
 }
 
 .ladder-slider__thumb-grip {
-  position: absolute;
-  left: calc(22px + ((100% - 44px) * var(--value)) - 16px);
-  top: 50%;
-  width: 32px;
-  height: 8px;
-  transform: translateY(-50%);
-  border-radius: 999px;
-  background: rgba(55, 33, 17, 0.45);
-  box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.08),
-    inset 0 -1px 2px rgba(0, 0, 0, 0.22);
-  z-index: 6;
+  display: none;
 }
 
 .ladder-slider__wood-wear {
@@ -789,7 +763,7 @@ button:disabled {
 
 @media (max-width: 720px) and (orientation: portrait) {
   .touch-control--throttle {
-    top: 33%;
+    top: 28%;
   }
 
   .touch-control--pitch {
@@ -798,7 +772,7 @@ button:disabled {
 
   .touch-control--ladder {
     right: max(72px, env(safe-area-inset-right));
-    bottom: max(108px, calc(env(safe-area-inset-bottom) + 86px));
+    bottom: max(76px, calc(env(safe-area-inset-bottom) + 54px));
   }
 
   .flight-stick {
