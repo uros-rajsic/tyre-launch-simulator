@@ -520,6 +520,7 @@ function normalizeWheelToPivot(mesh) {
 }
 
 let flywheelModelPivot = null;
+let engineModel = null;
 let boardModel = null;
 let boardSupportBox = null;
 let buildingModel = null;
@@ -576,6 +577,7 @@ function installMachineModel(mesh, json, sourceName) {
   mesh.scale.setScalar(ENGINE_MODEL_SCALE);
   mesh.position.copy(ENGINE_MODEL_POSITION);
   mesh.rotation.y = Math.PI;
+  engineModel = mesh;
   machineGroup.add(mesh);
   state.engineModelInfo = `${sourceName}: ${json.nodes?.length || 0} nodes / ${json.meshes?.length || 0} mesh`;
 }
@@ -803,11 +805,39 @@ const MODEL_FILE_BYTES = {
   "stick.glb": 3389336,
   "tyre.glb": 9258648,
 };
+const MODEL_LOAD_MAX_ATTEMPTS = 3;
+const MODEL_LOAD_RETRY_DELAY_MS = 650;
 const modelLoadingState = Object.fromEntries(
-  Object.entries(MODEL_FILE_BYTES).map(([name, total]) => [name, { loaded: 0, total, done: false, failed: false }])
+  Object.entries(MODEL_FILE_BYTES).map(([name, total]) => [name, {
+    loaded: 0,
+    total,
+    done: false,
+    failed: false,
+    retrying: false,
+    attempt: 0,
+    error: "",
+  }])
 );
 let loadingCompletionQueued = false;
 updateLoadingScreen();
+
+function areRequiredModelsReady() {
+  const failedFiles = Object.values(modelLoadingState).some((file) => file.failed);
+  return (
+    !failedFiles &&
+    state.engineModelLoaded &&
+    state.gameplayModelsLoaded &&
+    engineModel &&
+    flywheelModelPivot &&
+    boardModel &&
+    buildingModel &&
+    wellModel &&
+    ladderModel &&
+    stick.geometry &&
+    tyre.geometry &&
+    true
+  );
+}
 
 function updateLoadingScreen() {
   const files = Object.values(modelLoadingState);
@@ -815,24 +845,28 @@ function updateLoadingScreen() {
   const totalBytes = files.reduce((sum, file) => sum + Math.max(file.total, file.loaded), 0);
   const completedFiles = files.filter((file) => file.done || file.failed).length;
   const failedFiles = files.filter((file) => file.failed).length;
+  const retryingFiles = files.filter((file) => file.retrying).length;
   const percent = totalBytes > 0 ? Math.min(100, Math.round((loadedBytes / totalBytes) * 100)) : 0;
+  const ready = areRequiredModelsReady();
 
   loadingBar.style.width = `${percent}%`;
   loadingPercent.textContent = `${percent}%`;
-  loadingDetail.textContent =
-    failedFiles > 0
-      ? `${completedFiles}/${files.length} model files finished, ${failedFiles} failed`
-      : `${completedFiles}/${files.length} model files ready`;
+  if (failedFiles > 0) {
+    loadingTitle.textContent = "Model load failed";
+    loadingDetail.textContent = `${completedFiles}/${files.length} model files finished, ${failedFiles} failed. Refresh to retry.`;
+    startButton.disabled = true;
+    return;
+  }
+  loadingDetail.textContent = retryingFiles > 0
+    ? `${completedFiles}/${files.length} model files ready, retrying ${retryingFiles}`
+    : `${completedFiles}/${files.length} model files ready`;
 
   if (completedFiles === files.length) {
-    loadingTitle.textContent = failedFiles > 0 ? "Some models failed" : "Ready";
-    const installedOrFailed = failedFiles > 0 || (state.engineModelLoaded && state.gameplayModelsLoaded);
-    if (installedOrFailed && !loadingCompletionQueued) {
+    loadingTitle.textContent = ready ? "Ready" : "Finalizing models";
+    if (ready && !loadingCompletionQueued) {
       loadingCompletionQueued = true;
       startButton.disabled = false;
-      window.setTimeout(() => loadingScreen.classList.add("is-complete"), failedFiles > 0 ? 900 : 240);
-    } else if (!installedOrFailed) {
-      loadingTitle.textContent = "Finalizing models";
+      window.setTimeout(() => loadingScreen.classList.add("is-complete"), 240);
     }
   }
 }
@@ -845,13 +879,31 @@ function setModelLoadProgress(sourceName, loaded, total = modelLoadingState[sour
   updateLoadingScreen();
 }
 
-function finishModelLoad(sourceName, failed = false) {
+function finishModelLoad(sourceName, failed = false, error = null) {
   const file = modelLoadingState[sourceName];
   if (!file) return;
   file.failed = failed;
+  file.retrying = false;
   file.done = !failed;
   file.loaded = file.total || file.loaded;
+  file.error = error ? (error.message || String(error)) : "";
   updateLoadingScreen();
+}
+
+function markModelRetry(sourceName, attempt, error) {
+  const file = modelLoadingState[sourceName];
+  if (!file) return;
+  file.loaded = 0;
+  file.failed = false;
+  file.done = false;
+  file.retrying = true;
+  file.attempt = attempt;
+  file.error = error ? (error.message || String(error)) : "";
+  updateLoadingScreen();
+}
+
+function waitForModelRetry(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function mergeChunks(chunks, byteLength) {
@@ -891,19 +943,34 @@ async function readResponseArrayBufferWithProgress(response, sourceName) {
 }
 
 async function loadRequiredGlb(sourceName) {
-  try {
-    const response = await fetch(`${MODEL_BASE_PATH}/${sourceName}`);
-    if (!response.ok) {
-      throw new Error(`Could not load ${sourceName}: ${response.status} ${response.statusText}`);
+  let lastError = null;
+  for (let attempt = 1; attempt <= MODEL_LOAD_MAX_ATTEMPTS; attempt++) {
+    try {
+      const retrySuffix = attempt === 1 ? "" : `?retry=${Date.now()}-${attempt}`;
+      const response = await fetch(`${MODEL_BASE_PATH}/${sourceName}${retrySuffix}`, {
+        cache: attempt === 1 ? "default" : "reload",
+      });
+      if (!response.ok) {
+        throw new Error(`Could not load ${sourceName}: ${response.status} ${response.statusText}`);
+      }
+      const buffer = await readResponseArrayBufferWithProgress(response, sourceName);
+      const expectedBytes = MODEL_FILE_BYTES[sourceName] || 0;
+      if (expectedBytes && buffer.byteLength !== expectedBytes) {
+        throw new Error(`Incomplete ${sourceName}: received ${buffer.byteLength}/${expectedBytes} bytes`);
+      }
+      const asset = await createMeshFromGlbBuffer(buffer);
+      finishModelLoad(sourceName);
+      return asset;
+    } catch (error) {
+      lastError = error;
+      if (attempt < MODEL_LOAD_MAX_ATTEMPTS) {
+        markModelRetry(sourceName, attempt + 1, error);
+        await waitForModelRetry(MODEL_LOAD_RETRY_DELAY_MS * attempt);
+      }
     }
-    const buffer = await readResponseArrayBufferWithProgress(response, sourceName);
-    const asset = await createMeshFromGlbBuffer(buffer);
-    finishModelLoad(sourceName);
-    return asset;
-  } catch (error) {
-    finishModelLoad(sourceName, true);
-    throw error;
   }
+  finishModelLoad(sourceName, true, lastError);
+  throw lastError;
 }
 
 async function installSplitEngineModels() {
@@ -1894,7 +1961,9 @@ function updateTouchControls() {
 }
 
 function startGame() {
-  if (startButton.disabled) {
+  if (startButton.disabled || !areRequiredModelsReady()) {
+    loadingScreen.classList.remove("is-complete");
+    loadingTitle.textContent = "Finalizing models";
     return;
   }
   ensureAudio();
@@ -4789,6 +4858,21 @@ window.render_game_to_text = () =>
     engineModel: {
       loaded: state.engineModelLoaded,
       info: state.engineModelInfo,
+    },
+    loading: {
+      ready: areRequiredModelsReady(),
+      startDisabled: startButton.disabled,
+      completed: Object.values(modelLoadingState).filter((file) => file.done || file.failed).length,
+      failed: Object.values(modelLoadingState).filter((file) => file.failed).length,
+      retrying: Object.values(modelLoadingState).filter((file) => file.retrying).length,
+      files: Object.fromEntries(Object.entries(modelLoadingState).map(([name, file]) => [name, {
+        done: file.done,
+        failed: file.failed,
+        retrying: file.retrying,
+        attempt: file.attempt,
+        loaded: file.loaded,
+        total: file.total,
+      }])),
     },
     blackSmoke: Number(state.blackSmoke.toFixed(2)),
     score: state.score,
