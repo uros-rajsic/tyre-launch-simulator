@@ -102,7 +102,10 @@ const world = {
   wellX: 20,
   wellZ: -350,
   wellHeight: 1.2,
-  wellRadius: 4.5,
+  wellRadius: 2.35,
+  wellMouthRadius: 2.35,
+  wellOuterRadius: 5.3,
+  wellBaseY: 0.02,
   doorX: -3.4,
   doorZ: -184,
   doorHalfWidth: 2.25,
@@ -143,6 +146,8 @@ const state = {
     poseBlend: 0,
     curveSpin: 0,
     scoreTarget: null,
+    wellLaunchTimer: 0,
+    wellWallCooldown: 0,
     dragDepth: world.machineZ + 0.6,
   },
   ladderOffset: 0,
@@ -213,6 +218,8 @@ const state = {
   orphanTyres: [],
   tyreDisposals: [],
   tyreDustPuffs: [],
+  wellMudPuffs: [],
+  wellMudCarry: 0,
   tyreDustCarry: 0,
   birds: [],
   nextBirdTimer: 3.5,
@@ -518,6 +525,51 @@ let boardSupportBox = null;
 let buildingModel = null;
 let ladderModel = null;
 let wellModel = null;
+const wellHoleShadow = new THREE.Mesh(
+  new THREE.CircleGeometry(1, 48),
+  new THREE.MeshBasicMaterial({
+    color: 0x050301,
+    transparent: true,
+    opacity: 0.84,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+  })
+);
+wellHoleShadow.rotation.x = -Math.PI / 2;
+wellHoleShadow.renderOrder = 2;
+wellHoleShadow.visible = false;
+scene.add(wellHoleShadow);
+const wellGroundHoleShadow = new THREE.Mesh(
+  new THREE.CircleGeometry(1, 64),
+  new THREE.MeshBasicMaterial({
+    color: 0x030201,
+    transparent: true,
+    opacity: 0.92,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -4,
+    polygonOffsetUnits: -4,
+  })
+);
+wellGroundHoleShadow.rotation.x = -Math.PI / 2;
+wellGroundHoleShadow.renderOrder = 1.5;
+wellGroundHoleShadow.visible = false;
+scene.add(wellGroundHoleShadow);
+const wellShaftDarkness = new THREE.Mesh(
+  new THREE.CylinderGeometry(1, 1, 1, 64, 1, true),
+  new THREE.MeshBasicMaterial({
+    color: 0x050301,
+    transparent: true,
+    opacity: 0.7,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  })
+);
+wellShaftDarkness.renderOrder = 1.4;
+wellShaftDarkness.visible = false;
+scene.add(wellShaftDarkness);
 
 function installMachineModel(mesh, json, sourceName) {
   normalizeModelToGround(mesh);
@@ -579,14 +631,84 @@ function installWellModel(mesh, json, sourceName) {
   state.engineModelInfo += ` + ${sourceName}: ${json.nodes?.length || 0} nodes / ${json.meshes?.length || 0} mesh`;
 }
 
+function syncWellHoleVisuals() {
+  const catchRadius = getWellCatchRadius();
+  const baseY = world.wellBaseY ?? groundHeightAt(world.wellX, world.wellZ);
+  const shaftHeight = Math.max(0.8, world.wellHeight - baseY);
+  wellHoleShadow.position.set(world.wellX, world.wellHeight + 0.055, world.wellZ);
+  wellHoleShadow.scale.setScalar(catchRadius);
+  wellHoleShadow.visible = true;
+  wellGroundHoleShadow.position.set(world.wellX, baseY + 0.035, world.wellZ);
+  wellGroundHoleShadow.scale.setScalar(catchRadius * 1.12);
+  wellGroundHoleShadow.visible = true;
+  wellShaftDarkness.position.set(world.wellX, baseY + shaftHeight * 0.5, world.wellZ);
+  wellShaftDarkness.scale.set(catchRadius * 1.02, shaftHeight, catchRadius * 1.02);
+  wellShaftDarkness.visible = true;
+}
+
+function estimateWellMouthFromGeometry(box) {
+  const position = wellModel?.geometry?.attributes?.position;
+  if (!position) return null;
+  const modelSpan = Math.min(box.max.x - box.min.x, box.max.z - box.min.z);
+  const modelHeight = box.max.y - box.min.y;
+  const mouthY = box.min.y + modelHeight * 0.38;
+  const minY = mouthY - 0.35;
+  const maxY = mouthY + 1.15;
+  const frameTrimX = box.max.x - modelSpan * 0.16;
+  const vertex = new THREE.Vector3();
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  const samples = [];
+
+  for (let i = 0; i < position.count; i++) {
+    vertex.fromBufferAttribute(position, i).applyMatrix4(wellModel.matrixWorld);
+    if (vertex.y < minY || vertex.y > maxY || vertex.x > frameTrimX) {
+      continue;
+    }
+    samples.push({ x: vertex.x, z: vertex.z });
+    minX = Math.min(minX, vertex.x);
+    maxX = Math.max(maxX, vertex.x);
+    minZ = Math.min(minZ, vertex.z);
+    maxZ = Math.max(maxZ, vertex.z);
+  }
+
+  if (samples.length < 80) {
+    return null;
+  }
+
+  const centerX = (minX + maxX) * 0.5;
+  const centerZ = (minZ + maxZ) * 0.5;
+  const distances = samples
+    .map((sample) => Math.hypot(sample.x - centerX, sample.z - centerZ))
+    .sort((a, b) => a - b);
+  const q = (ratio) => distances[Math.max(0, Math.min(distances.length - 1, Math.floor(ratio * (distances.length - 1))))];
+  const innerRadius = THREE.MathUtils.clamp(q(0.05) * 1.01, modelSpan * 0.16, modelSpan * 0.23);
+  const outerRadius = THREE.MathUtils.clamp(q(0.75), innerRadius + 1.8, modelSpan * 0.38);
+  return {
+    x: centerX,
+    z: centerZ,
+    mouthY,
+    innerRadius,
+    outerRadius,
+  };
+}
+
 function alignWellTargetToModel() {
   if (!wellModel) return;
   wellModel.updateWorldMatrix(true, true);
   const box = tempBox.setFromObject(wellModel);
-  world.wellX = (box.min.x + box.max.x) * 0.5;
-  world.wellZ = (box.min.z + box.max.z) * 0.5;
-  world.wellHeight = box.min.y + (box.max.y - box.min.y) * 0.38;
-  world.wellRadius = Math.max(5.2, Math.min(box.max.x - box.min.x, box.max.z - box.min.z) * 0.24);
+  world.wellBaseY = box.min.y + 0.02;
+  const modelSpan = Math.min(box.max.x - box.min.x, box.max.z - box.min.z);
+  const mouth = estimateWellMouthFromGeometry(box);
+  world.wellX = mouth?.x ?? (box.min.x + box.max.x) * 0.5;
+  world.wellZ = mouth?.z ?? (box.min.z + box.max.z) * 0.5;
+  world.wellHeight = mouth?.mouthY ?? box.min.y + (box.max.y - box.min.y) * 0.38;
+  world.wellMouthRadius = mouth?.innerRadius ?? Math.max(2.25, Math.min(2.95, modelSpan * 0.145));
+  world.wellRadius = world.wellMouthRadius;
+  world.wellOuterRadius = mouth?.outerRadius ?? Math.max(world.wellMouthRadius + 2.65, Math.min(6.25, modelSpan * 0.32));
+  syncWellHoleVisuals();
 }
 
 function alignChimneyToBuildingModel() {
@@ -1015,6 +1137,22 @@ scene.add(tyreDustGroup);
 const tyreDustGeometry = new THREE.SphereGeometry(1, 12, 8);
 const tyreDustMaterial = new THREE.MeshBasicMaterial({
   color: 0xd8bd8c,
+  transparent: true,
+  opacity: 0,
+  depthWrite: false,
+});
+
+const wellMudGroup = new THREE.Group();
+scene.add(wellMudGroup);
+const wellMudDropGeometry = new THREE.SphereGeometry(1, 8, 6);
+const wellMudDropMaterial = new THREE.MeshBasicMaterial({
+  color: 0x4f351d,
+  transparent: true,
+  opacity: 0,
+  depthWrite: false,
+});
+const wellMudPlumeMaterial = new THREE.MeshBasicMaterial({
+  color: 0x6a4b2a,
   transparent: true,
   opacity: 0,
   depthWrite: false,
@@ -1463,6 +1601,8 @@ function resetRound(keepScore = true, nextMode = "playing") {
   state.tyre.rollTimer = 0;
   state.tyre.curveSpin = 0;
   state.tyre.scoreTarget = null;
+  state.tyre.wellLaunchTimer = 0;
+  state.tyre.wellWallCooldown = 0;
   state.tyre.poseBlend = 0;
   state.tyre.idleAngle = THREE.MathUtils.lerp(-0.7, 0.7, Math.random());
   state.tyre.position.copy(getIdleTyrePosition());
@@ -1516,6 +1656,12 @@ function resetRound(keepScore = true, nextMode = "playing") {
       puff.mesh.material.dispose();
     });
     state.tyreDustPuffs.length = 0;
+    state.wellMudPuffs.forEach((puff) => {
+      wellMudGroup.remove(puff.mesh);
+      puff.mesh.material.dispose();
+    });
+    state.wellMudPuffs.length = 0;
+    state.wellMudCarry = 0;
     state.tyreDustCarry = 0;
     state.birds.length = 0;
     birdGroup.clear();
@@ -1873,6 +2019,131 @@ function getChimneyMouthCrossing(previousPosition, currentPosition) {
   return getChimneyMouthCrossingFor(previousPosition, currentPosition, state.tyre.velocity);
 }
 
+function getWellCatchRadius() {
+  const mouthRadius = world.wellMouthRadius || world.wellRadius;
+  return Math.max(1.75, mouthRadius * 1.04);
+}
+
+function getWellOuterCollisionRadius() {
+  return world.wellOuterRadius || Math.max(getWellCatchRadius() + 2.65, 5.2);
+}
+
+function getWellDistance(position) {
+  return Math.hypot(position.x - world.wellX, position.z - world.wellZ);
+}
+
+function isInsideWellOpening(position, loosen = 0) {
+  return getWellDistance(position) <= getWellCatchRadius() + loosen;
+}
+
+function getWellAwareGroundHeight(x, z, bodyRadius = 0) {
+  const distance = Math.hypot(x - world.wellX, z - world.wellZ);
+  if (distance <= getWellCatchRadius() + bodyRadius * 0.08) {
+    return (world.wellBaseY ?? groundHeightAt(world.wellX, world.wellZ)) - 18;
+  }
+  return groundHeightAt(x, z);
+}
+
+function getWellFallScorePosition(body, previousPosition, bodyRadius) {
+  if (body.velocity.y > 0.8) {
+    return null;
+  }
+  const catchRadius = getWellCatchRadius();
+  const distance = getWellDistance(body.position);
+  if (distance > catchRadius) {
+    return null;
+  }
+  const entryY = world.wellHeight + 0.2;
+  const crossedMouth =
+    previousPosition.y >= entryY - bodyRadius * 0.18 &&
+    body.position.y <= entryY + bodyRadius * 0.28;
+  const dippedIntoShaft = body.position.y - bodyRadius * 0.28 <= world.wellHeight + 0.12;
+  if (!crossedMouth && !dippedIntoShaft) {
+    return null;
+  }
+  const t = THREE.MathUtils.clamp(
+    (previousPosition.y - entryY) / Math.max(0.0001, previousPosition.y - body.position.y),
+    0,
+    1
+  );
+  return new THREE.Vector3(
+    THREE.MathUtils.lerp(previousPosition.x, body.position.x, t),
+    entryY,
+    THREE.MathUtils.lerp(previousPosition.z, body.position.z, t)
+  );
+}
+
+function bounceTyreOffWellWall(body, previousPosition, bodyRadius, dt, announce = false) {
+  body.wellWallCooldown = Math.max(0, (body.wellWallCooldown || 0) - dt);
+  if (body.wellWallCooldown > 0) {
+    return false;
+  }
+
+  const catchRadius = getWellCatchRadius();
+  const outerRadius = getWellOuterCollisionRadius();
+  const baseY = world.wellBaseY ?? groundHeightAt(world.wellX, world.wellZ);
+  const topY = world.wellHeight + 0.15;
+  const distance = getWellDistance(body.position);
+  const previousDistance = getWellDistance(previousPosition);
+  const lowerY = body.position.y - bodyRadius;
+  const previousLowerY = previousPosition.y - bodyRadius;
+  const overlapsWellHeight =
+    body.position.y + bodyRadius * 0.72 >= baseY &&
+    body.position.y - bodyRadius * 0.5 <= topY + 0.2;
+  const nearOuterWall = distance <= outerRadius + bodyRadius * 0.58;
+  const safelyInOpening = distance <= catchRadius * 0.92;
+
+  if (!overlapsWellHeight || !nearOuterWall || safelyInOpening) {
+    return false;
+  }
+
+  const hitTopRim =
+    body.velocity.y < 0 &&
+    previousLowerY >= topY &&
+    lowerY <= topY &&
+    distance >= catchRadius * 0.9 &&
+    distance <= outerRadius + bodyRadius * 0.5;
+  const hitSideWall =
+    body.position.y > baseY + bodyRadius * 0.18 &&
+    body.position.y < topY + bodyRadius * 0.5 &&
+    distance >= catchRadius * 0.86 &&
+    distance <= outerRadius + bodyRadius * 0.58;
+
+  if (!hitTopRim && !hitSideWall) {
+    return false;
+  }
+
+  const radial = tempVec2.set(body.position.x - world.wellX, 0, body.position.z - world.wellZ);
+  if (radial.lengthSq() < 0.0001) {
+    radial.set(previousPosition.x - world.wellX || 1, 0, previousPosition.z - world.wellZ || 0);
+  }
+  radial.normalize();
+  const fromOutside = hitTopRim || previousDistance >= outerRadius || distance > (catchRadius + outerRadius) * 0.52;
+  const targetDistance = hitTopRim
+    ? Math.max(distance, catchRadius + bodyRadius * 0.42)
+    : fromOutside ? outerRadius + bodyRadius * 0.42 : catchRadius * 0.74;
+  body.position.x = world.wellX + radial.x * targetDistance;
+  body.position.z = world.wellZ + radial.z * targetDistance;
+  if (hitTopRim) {
+    body.position.y = Math.max(body.position.y, topY + bodyRadius + 0.05);
+  }
+
+  const radialSpeed = body.velocity.dot(radial);
+  body.velocity.addScaledVector(radial, fromOutside
+    ? Math.max(5.2, Math.abs(radialSpeed) * 1.25 + 3.6)
+    : -Math.max(4.4, Math.abs(radialSpeed) * 1.1 + 2.8));
+  body.velocity.y = Math.max(hitTopRim ? 6.2 : 4.4, Math.abs(body.velocity.y) * (hitTopRim ? 0.5 : 0.32));
+  body.velocity.x *= 0.78;
+  body.velocity.z *= 0.78;
+  body.spinRate = Math.max(body.spinRate || 0, hitTopRim ? 34 : 24);
+  body.wellWallCooldown = 0.16;
+  if (announce) {
+    playSound("rim");
+    setMessage(hitTopRim ? "Stone rim hit. The well rejected that one." : "It clipped the well wall. Aim for the dark hole.");
+  }
+  return true;
+}
+
 function getWellMouthCrossingFor(previousPosition, currentPosition, velocity) {
   const entryY = world.wellHeight + 0.2;
   const descendingThroughWell =
@@ -1888,10 +2159,12 @@ function getWellMouthCrossingFor(previousPosition, currentPosition, velocity) {
   const crossingX = THREE.MathUtils.lerp(previousPosition.x, currentPosition.x, t);
   const crossingZ = THREE.MathUtils.lerp(previousPosition.z, currentPosition.z, t);
   const horizontalDistance = Math.hypot(crossingX - world.wellX, crossingZ - world.wellZ);
+  const catchRadius = getWellCatchRadius();
   return {
     crossed: true,
-    scored: horizontalDistance < world.wellRadius,
+    scored: horizontalDistance <= catchRadius,
     distance: horizontalDistance,
+    catchRadius,
     position: new THREE.Vector3(crossingX, entryY, crossingZ),
   };
 }
@@ -2015,18 +2288,27 @@ function scoreRound(entryPosition = state.tyre.position) {
 
 function scoreWellRound(entryPosition = state.tyre.position) {
   const entryFallSpeed = Math.min(state.tyre.velocity.y, -8.4);
+  const offsetX = THREE.MathUtils.clamp(entryPosition.x - world.wellX, -0.7, 0.7);
+  const offsetZ = THREE.MathUtils.clamp(entryPosition.z - world.wellZ, -0.7, 0.7);
   state.mode = "win";
   state.tyre.phase = "scored";
   state.tyre.scoreTarget = "well";
-  state.tyre.reloadTimer = 3.8;
-  state.tyre.position.copy(entryPosition);
-  state.tyre.velocity.set(state.tyre.velocity.x * 0.08, entryFallSpeed, state.tyre.velocity.z * 0.08);
-  state.tyre.spinRate = Math.max(state.tyre.spinRate, 22);
+  state.tyre.reloadTimer = 4.8;
+  state.tyre.wellLaunchTimer = 0;
+  state.tyre.position.set(world.wellX + offsetX * 0.35, world.wellHeight + 0.55, world.wellZ + offsetZ * 0.35);
+  state.tyre.velocity.set(
+    offsetX * 4.2 + state.tyre.velocity.x * 0.08,
+    46 + Math.min(Math.abs(entryFallSpeed) * 0.42, 10),
+    offsetZ * 3.8 + state.tyre.velocity.z * 0.05
+  );
+  state.tyre.spinRate = Math.max(state.tyre.spinRate, 66);
+  state.wellMudCarry = 0;
   state.score += 1;
   state.wellHits += 1;
   state.justScored = true;
+  spawnWellMudBurst(state.tyre.position, state.tyre.velocity);
   playSound("well");
-  setMessage("Swish. Easter egg: the tyre disappeared into the old well.");
+  setMessage("The well said nope and launched it back.");
   updateHud();
 }
 
@@ -2790,6 +3072,7 @@ function rejectTyreMount(fit = getTyreMountFit()) {
     velocity: new THREE.Vector3(sideKick, verticalKick, depthKick),
     spinRate: THREE.MathUtils.lerp(7, 38, wham) + missSeverity * THREE.MathUtils.lerp(2, 14, wham) + Math.random() * THREE.MathUtils.lerp(2, 18, wham),
     bounceCount: 0,
+    wellWallCooldown: 0,
     life: 0,
   });
 
@@ -2847,6 +3130,7 @@ function handOffActiveTyre() {
     rollTimer: tyreState.rollTimer,
     airborneTime: tyreState.airborneTime,
     scoreTarget: tyreState.scoreTarget,
+    wellWallCooldown: tyreState.wellWallCooldown || 0,
     ladderOffset: state.ladderOffset,
     ladderTilt: state.ladderTilt,
     ladderBank: state.ladderBank,
@@ -2886,6 +3170,8 @@ function primeNextTyre() {
   state.tyre.rollTimer = 0;
   state.tyre.curveSpin = 0;
   state.tyre.scoreTarget = null;
+  state.tyre.wellLaunchTimer = 0;
+  state.tyre.wellWallCooldown = 0;
   state.tyre.poseBlend = 0;
   state.tyre.idleAngle = THREE.MathUtils.lerp(-0.7, 0.7, Math.random());
   state.tyre.position.copy(getIdleTyrePosition());
@@ -3107,10 +3393,16 @@ function updateTyre(dt) {
       ? { crossed: false, scored: false, rimMiss: false, position: tyreState.position }
       : getChimneyMouthCrossing(previousPosition, tyreState.position);
     const wellCrossing = getWellMouthCrossingFor(previousPosition, tyreState.position, tyreState.velocity);
+    const tyreBodyRadius = getVisualTyreOuterRadius();
+    const wellFallScore = wellCrossing.scored
+      ? wellCrossing.position
+      : getWellFallScorePosition(tyreState, previousPosition, tyreBodyRadius);
     if (mouthCrossing.scored) {
       scoreRound(mouthCrossing.position);
-    } else if (wellCrossing.scored) {
-      scoreWellRound(wellCrossing.position);
+    } else if (wellFallScore) {
+      scoreWellRound(wellFallScore);
+    } else if (bounceTyreOffWellWall(tyreState, previousPosition, tyreBodyRadius, dt, true)) {
+      state.dustBurst = Math.max(state.dustBurst, 0.55);
     } else if (mouthCrossing.rimMiss) {
       if ((tyreState.rimBounces || 0) < 3) {
         bounceTyreOffChimneyRim(tyreState, mouthCrossing);
@@ -3120,10 +3412,10 @@ function updateTyre(dt) {
     } else if (
       tyreState.airborneTime > 0.45 &&
       tyreState.velocity.y < -1.4 &&
-      tyreState.position.y <= groundHeightAt(tyreState.position.x, tyreState.position.z) + getVisualTyreOuterRadius() + 0.2
+      tyreState.position.y <= getWellAwareGroundHeight(tyreState.position.x, tyreState.position.z, tyreBodyRadius) + tyreBodyRadius + 0.2
     ) {
       const wellCorridor = isInWellAttemptCorridor(tyreState.position);
-      tyreState.position.y = groundHeightAt(tyreState.position.x, tyreState.position.z) + getVisualTyreOuterRadius() + 0.22;
+      tyreState.position.y = getWellAwareGroundHeight(tyreState.position.x, tyreState.position.z, tyreBodyRadius) + tyreBodyRadius + 0.22;
       if (wellCorridor && (tyreState.bounceCount || 0) < 9) {
         tyreState.bounceCount = (tyreState.bounceCount || 0) + 1;
         const skipLift = Math.max(3.2, 7.4 - tyreState.bounceCount * 0.42);
@@ -3144,10 +3436,21 @@ function updateTyre(dt) {
     }
   } else if (tyreState.phase === "scored") {
     const isWellScore = tyreState.scoreTarget === "well";
-    tyreState.velocity.y = damping(tyreState.velocity.y, isWellScore ? -8.8 : -10.4, 1.8, dt);
-    tyreState.position.y = Math.max((isWellScore ? world.wellHeight : world.chimneyHeight) - 3.6, tyreState.position.y + tyreState.velocity.y * dt);
-    tyreState.spinRate = damping(tyreState.spinRate, 24, 0.45, dt);
-    if (!isWellScore) {
+    if (isWellScore) {
+      tyreState.wellLaunchTimer += dt;
+      tyreState.velocity.y -= 18.5 * dt;
+      tyreState.velocity.x = damping(tyreState.velocity.x, 0, 0.34, dt);
+      tyreState.velocity.z = damping(tyreState.velocity.z, 0, 0.28, dt);
+      tyreState.position.addScaledVector(tyreState.velocity, dt);
+      const trailStrength = THREE.MathUtils.clamp((0.82 - tyreState.wellLaunchTimer) / 0.82, 0, 1);
+      if (trailStrength > 0) {
+        emitWellMudTrail(tyreState.position, tyreState.velocity, dt, trailStrength);
+      }
+      tyreState.spinRate = damping(tyreState.spinRate, 42, 0.38, dt);
+    } else {
+      tyreState.velocity.y = damping(tyreState.velocity.y, -10.4, 1.8, dt);
+      tyreState.position.y = Math.max(world.chimneyHeight - 3.6, tyreState.position.y + tyreState.velocity.y * dt);
+      tyreState.spinRate = damping(tyreState.spinRate, 24, 0.45, dt);
       const enteredLip = THREE.MathUtils.clamp((world.chimneyHeight + 1.25 - tyreState.position.y) / 3.2, 0, 1);
       state.blackSmoke = Math.max(state.blackSmoke, enteredLip * 1.25);
     }
@@ -3187,7 +3490,7 @@ function updateTyre(dt) {
         : 0;
     tyre.rotation.x -= tyreState.spinRate * dt;
   }
-  const scoredHideY = tyreState.scoreTarget === "well" ? world.wellHeight + 0.22 : world.chimneyHeight + 0.28;
+  const scoredHideY = tyreState.scoreTarget === "well" ? world.wellHeight + 0.12 : world.chimneyHeight + 0.28;
   tyre.visible = state.gameplayModelsLoaded && (tyreState.phase !== "scored" || tyreState.position.y > scoredHideY);
   updateTyreVisualShape(dt);
   updateTyreContactShadow();
@@ -3297,12 +3600,16 @@ function updateLooseTyrePhysics(projectile, dt) {
     projectile.airborneTime += dt;
     projectile.rimCooldown = Math.max(0, (projectile.rimCooldown || 0) - dt);
     const previousPosition = tempVec.copy(projectile.position);
+    const visualRadius = TYRE_OUTER_RADIUS * Math.max(1, projectile.mesh.children[0].scale.x);
     projectile.velocity.y -= 14.6 * dt;
     projectile.position.addScaledVector(projectile.velocity, dt);
     const mouthCrossing = projectile.rimCooldown > 0
       ? { crossed: false, scored: false, rimMiss: false, position: projectile.position }
       : getChimneyMouthCrossingFor(previousPosition, projectile.position, projectile.velocity);
     const wellCrossing = getWellMouthCrossingFor(previousPosition, projectile.position, projectile.velocity);
+    const wellFallScore = wellCrossing.scored
+      ? wellCrossing.position
+      : getWellFallScorePosition(projectile, previousPosition, visualRadius);
     if (mouthCrossing.scored) {
       state.score += 1;
       state.blackSmoke = Math.max(state.blackSmoke, 1.15);
@@ -3311,14 +3618,17 @@ function updateLooseTyrePhysics(projectile, dt) {
       projectile.position.copy(mouthCrossing.position);
       projectile.velocity.y = Math.min(projectile.velocity.y, -9.2);
       playSound("chimney");
-    } else if (wellCrossing.scored) {
+    } else if (wellFallScore) {
       state.score += 1;
       state.wellHits += 1;
       projectile.phase = "scored";
       projectile.scoreTarget = "well";
-      projectile.position.copy(wellCrossing.position);
-      projectile.velocity.y = Math.min(projectile.velocity.y, -8.4);
+      projectile.position.copy(wellFallScore);
+      projectile.velocity.set(projectile.velocity.x * 0.08, 46, projectile.velocity.z * 0.05);
+      spawnWellMudBurst(projectile.position, projectile.velocity);
       playSound("well");
+    } else if (bounceTyreOffWellWall(projectile, previousPosition, visualRadius, dt, false)) {
+      projectile.life = Math.max(projectile.life, 0.1);
     } else if (mouthCrossing.rimMiss) {
       if ((projectile.rimBounces || 0) < 3) {
         bounceTyreOffChimneyRim(projectile, mouthCrossing);
@@ -3327,15 +3637,23 @@ function updateLooseTyrePhysics(projectile, dt) {
       }
     } else if (isTyreTrulyOutOfPlay(projectile.position)) {
       projectile.phase = "dead";
-    } else if (projectile.position.y <= groundHeightAt(projectile.position.x, projectile.position.z) + TYRE_OUTER_RADIUS + 0.26) {
+    } else if (projectile.position.y <= getWellAwareGroundHeight(projectile.position.x, projectile.position.z, visualRadius) + TYRE_OUTER_RADIUS + 0.26) {
       projectile.phase = "dead";
     }
   } else if (projectile.phase === "scored") {
     const isWellScore = projectile.scoreTarget === "well";
-    projectile.velocity.y = damping(projectile.velocity.y, isWellScore ? -8.8 : -10.4, 1.8, dt);
-    projectile.position.y = Math.max((isWellScore ? world.wellHeight : world.chimneyHeight) - 3.6, projectile.position.y + projectile.velocity.y * dt);
-    projectile.spinRate = damping(projectile.spinRate, 24, 0.45, dt);
-    if (projectile.position.y <= (isWellScore ? world.wellHeight + 0.22 : world.chimneyHeight + 0.28)) {
+    if (isWellScore) {
+      projectile.velocity.y -= 18.5 * dt;
+      projectile.velocity.x = damping(projectile.velocity.x, 0, 0.34, dt);
+      projectile.velocity.z = damping(projectile.velocity.z, 0, 0.28, dt);
+      projectile.position.addScaledVector(projectile.velocity, dt);
+      projectile.spinRate = damping(projectile.spinRate, 42, 0.38, dt);
+    } else {
+      projectile.velocity.y = damping(projectile.velocity.y, -10.4, 1.8, dt);
+      projectile.position.y = Math.max(world.chimneyHeight - 3.6, projectile.position.y + projectile.velocity.y * dt);
+      projectile.spinRate = damping(projectile.spinRate, 24, 0.45, dt);
+    }
+    if ((!isWellScore && projectile.position.y <= world.chimneyHeight + 0.28) || (isWellScore && projectile.life > 4.8)) {
       projectile.phase = "dead";
     }
   }
@@ -3565,6 +3883,101 @@ function emitRollingTyreDust(tyreState, dt, groundY, launchPower = 0.5) {
   }
 }
 
+function spawnWellMudBlob(position, velocity, options = {}) {
+  const material = (options.type === "plume" ? wellMudPlumeMaterial : wellMudDropMaterial).clone();
+  const baseScale = options.baseScale || 0.12;
+  const maxOpacity = options.opacity || 0.42;
+  material.opacity = maxOpacity;
+  const mesh = new THREE.Mesh(wellMudDropGeometry, material);
+  mesh.position.copy(position);
+  mesh.scale.setScalar(baseScale);
+  mesh.renderOrder = 3;
+  wellMudGroup.add(mesh);
+  state.wellMudPuffs.push({
+    mesh,
+    material,
+    velocity: velocity.clone(),
+    age: 0,
+    ttl: options.ttl || 0.9,
+    baseScale,
+    maxOpacity,
+    gravity: options.gravity || 18,
+    drag: options.drag || 1.5,
+    type: options.type || "drop",
+  });
+}
+
+function spawnWellMudBurst(position, launchVelocity = tempVec) {
+  const mouthRadius = world.wellMouthRadius || world.wellRadius;
+  const mouth = new THREE.Vector3(world.wellX, world.wellHeight + 0.14, world.wellZ);
+  const launchBoost = THREE.MathUtils.clamp(launchVelocity.y / 52, 0.7, 1.25);
+
+  for (let i = 0; i < 7; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const radius = Math.sqrt(Math.random()) * mouthRadius * 0.42;
+    const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+    const blobPosition = mouth.clone().addScaledVector(radial, radius);
+    blobPosition.y += Math.random() * 0.12;
+    const blobVelocity = radial.multiplyScalar(0.45 + Math.random() * 1.6);
+    blobVelocity.y = 6.2 + Math.random() * 4.2 + launchBoost * 3.2;
+    spawnWellMudBlob(blobPosition, blobVelocity, {
+      type: "plume",
+      baseScale: 0.26 + Math.random() * 0.18,
+      ttl: 0.58 + Math.random() * 0.28,
+      opacity: 0.26 + Math.random() * 0.12,
+      gravity: 7.5,
+      drag: 2.1,
+    });
+  }
+
+  for (let i = 0; i < 36; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const radius = Math.sqrt(Math.random()) * mouthRadius * 0.76;
+    const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+    const blobPosition = mouth.clone().addScaledVector(radial, radius);
+    blobPosition.y += Math.random() * 0.24;
+    const blobVelocity = radial.multiplyScalar(1.2 + Math.random() * 4.6);
+    blobVelocity.y = 10.5 + Math.random() * 13.5 + Math.min(launchVelocity.y * 0.24, 11);
+    spawnWellMudBlob(blobPosition, blobVelocity, {
+      type: "drop",
+      baseScale: 0.055 + Math.random() * 0.12,
+      ttl: 0.72 + Math.random() * 0.72,
+      opacity: 0.48 + Math.random() * 0.26,
+      gravity: 21 + Math.random() * 6,
+      drag: 1.2,
+    });
+  }
+}
+
+function emitWellMudTrail(position, velocity, dt, strength = 1) {
+  state.wellMudCarry += dt * 28 * THREE.MathUtils.clamp(strength, 0, 1);
+  let spawned = 0;
+  while (state.wellMudCarry >= 1 && spawned < 4) {
+    state.wellMudCarry -= 1;
+    spawned += 1;
+    const angle = Math.random() * Math.PI * 2;
+    const radius = Math.random() * 0.58;
+    const blobPosition = new THREE.Vector3(
+      position.x + Math.cos(angle) * radius,
+      position.y - 0.34 - Math.random() * 0.36,
+      position.z + Math.sin(angle) * radius
+    );
+    const blobVelocity = new THREE.Vector3(
+      velocity.x * 0.12 + (Math.random() - 0.5) * 2.5,
+      Math.max(4.2, velocity.y * 0.26) + Math.random() * 3.2,
+      velocity.z * 0.12 + (Math.random() - 0.5) * 2.5
+    );
+    spawnWellMudBlob(blobPosition, blobVelocity, {
+      type: "drop",
+      baseScale: 0.04 + Math.random() * 0.075,
+      ttl: 0.5 + Math.random() * 0.38,
+      opacity: 0.35 + Math.random() * 0.2,
+      gravity: 19,
+      drag: 1.6,
+    });
+  }
+}
+
 function updateTyreDustPuffs(dt) {
   for (let i = state.tyreDustPuffs.length - 1; i >= 0; i--) {
     const puff = state.tyreDustPuffs[i];
@@ -3586,6 +3999,47 @@ function updateTyreDustPuffs(dt) {
       tyreDustGroup.remove(puff.mesh);
       puff.material.dispose();
       state.tyreDustPuffs.splice(i, 1);
+    }
+  }
+}
+
+function updateWellMudPuffs(dt) {
+  for (let i = state.wellMudPuffs.length - 1; i >= 0; i--) {
+    const puff = state.wellMudPuffs[i];
+    puff.age += dt;
+    const t = THREE.MathUtils.clamp(puff.age / puff.ttl, 0, 1);
+    puff.velocity.y -= puff.gravity * dt;
+    puff.velocity.x = damping(puff.velocity.x, 0, puff.drag, dt);
+    puff.velocity.z = damping(puff.velocity.z, 0, puff.drag, dt);
+    puff.mesh.position.addScaledVector(puff.velocity, dt);
+
+    if (puff.type === "plume") {
+      const spread = 1 + t * 1.25;
+      puff.mesh.scale.set(
+        puff.baseScale * spread * 1.35,
+        puff.baseScale * (1.15 + t * 3.8),
+        puff.baseScale * spread * 1.35
+      );
+      puff.material.opacity = puff.maxOpacity * Math.pow(1 - t, 1.4);
+    } else {
+      const groundY = groundHeightAt(puff.mesh.position.x, puff.mesh.position.z) + 0.08;
+      if (puff.age > 0.16 && puff.mesh.position.y <= groundY) {
+        puff.mesh.position.y = groundY;
+        puff.velocity.y = Math.abs(puff.velocity.y) * 0.12;
+        puff.velocity.x *= 0.38;
+        puff.velocity.z *= 0.38;
+        puff.ttl = Math.min(puff.ttl, puff.age + 0.16);
+      }
+      const squash = puff.mesh.position.y <= groundY + 0.03 ? 0.42 : 1;
+      const scale = puff.baseScale * (1 - t * 0.18);
+      puff.mesh.scale.set(scale * (1.1 + (1 - squash) * 1.4), scale * squash, scale * 1.1);
+      puff.material.opacity = puff.maxOpacity * Math.pow(1 - t, 1.65);
+    }
+
+    if (t >= 1) {
+      wellMudGroup.remove(puff.mesh);
+      puff.material.dispose();
+      state.wellMudPuffs.splice(i, 1);
     }
   }
 }
@@ -3632,6 +4086,7 @@ function updateTyreDisposals(dt) {
 function updateEffects(dt) {
   updateTyreDisposals(dt);
   updateTyreDustPuffs(dt);
+  updateWellMudPuffs(dt);
   dustCloud.position.set(1.2, 0.9, world.machineZ - 0.8);
   dustCloud.material.opacity = state.dustBurst * 0.38;
   const dustScale = 1 + (1 - state.dustBurst) * 1.6;
@@ -3740,6 +4195,7 @@ function updateCamera(dt) {
       1
     );
     const airborneView = tyrePhase === "flying" || tyrePhase === "scored";
+    const wellScoreView = tyrePhase === "scored" && state.tyre.scoreTarget === "well";
     const chimneyApproach = THREE.MathUtils.smoothstep(flightProgress, 0.82, 1.0);
     const chaseZ = airborneView
       ? THREE.MathUtils.clamp(tyrePosition.z + 10.5 + chimneyApproach * 7.5, world.chimneyZ - 260, 18)
@@ -3753,7 +4209,9 @@ function updateCamera(dt) {
     desiredCameraPosition.set(
       THREE.MathUtils.clamp(airborneCameraX, -18, 30),
       THREE.MathUtils.clamp(
-        airborneView ? tyrePosition.y + 28.0 + chimneyApproach * 12.0 : 7.2 + tyrePosition.y * 0.18 + flightProgress * 4.2,
+        wellScoreView
+          ? tyrePosition.y + 22.0
+          : airborneView ? tyrePosition.y + 28.0 + chimneyApproach * 12.0 : 7.2 + tyrePosition.y * 0.18 + flightProgress * 4.2,
         airborneView ? 18 : 6.8,
         airborneView ? 260 : 96
       ),
@@ -3763,7 +4221,11 @@ function updateCamera(dt) {
       airborneView
         ? tyrePosition.x * 0.82
         : tyrePosition.x * 0.42,
-      THREE.MathUtils.clamp(targetHeight + (airborneView ? -10.0 - chimneyApproach * 5.0 : 2.6), 6.2, airborneView ? 240 : world.chimneyHeight + 12.5),
+      THREE.MathUtils.clamp(
+        targetHeight + (airborneView ? (wellScoreView ? -2.4 : -10.0 - chimneyApproach * 5.0) : 2.6),
+        6.2,
+        airborneView ? 240 : world.chimneyHeight + 12.5
+      ),
       airborneView
         ? tyrePosition.z - 1.6
         : THREE.MathUtils.lerp(tyrePosition.z - 8, world.chimneyZ, flightProgress * 0.55)
@@ -4300,6 +4762,12 @@ window.render_game_to_text = () =>
       y: world.wellHeight,
       z: world.wellZ,
       radius: world.wellRadius,
+      mouthRadius: world.wellMouthRadius,
+      catchRadius: Number(getWellCatchRadius().toFixed(2)),
+      outerRadius: Number(getWellOuterCollisionRadius().toFixed(2)),
+      baseY: Number((world.wellBaseY ?? 0).toFixed(2)),
+      holeShadowVisible: wellHoleShadow.visible,
+      groundHoleVisible: wellGroundHoleShadow.visible,
       hits: state.wellHits,
     },
     camera: {
@@ -4335,6 +4803,7 @@ window.render_game_to_text = () =>
     spentTyres: state.spentTyres.length,
     tyreDisposals: state.tyreDisposals.length,
     tyreDustPuffs: state.tyreDustPuffs.length,
+    wellMudPuffs: state.wellMudPuffs.length,
     spentTyrePositions: state.spentTyres.slice(-6).map((spent) => ({
       x: Number(spent.position.x.toFixed(2)),
       y: Number(spent.position.y.toFixed(2)),
